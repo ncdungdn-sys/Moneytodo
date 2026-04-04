@@ -19,6 +19,8 @@ from ui.expenses_tab import ExpensesFrame
 from ui.categories_tab import CategoriesFrame
 from ui.planned_tab import PlannedExpensesFrame
 from ui.reminders_tab import RemindersFrame
+from ui.reports_tab import ReportsFrame
+from ui.login_screen import LoginScreen
 
 # ── Colour palette ───────────────────────────────────────────────────────────
 BG = "#F0F4F8"
@@ -50,8 +52,14 @@ class MoneytodoApp(tk.Tk):
         # Apply ttk styles
         self._apply_styles()
 
-        # Init database
+        # Init database first (needed for login)
         db.init_db()
+
+        # Show login screen – exits app if user closes without authenticating
+        login = LoginScreen(self)
+        if not login.success:
+            self.destroy()
+            return
 
         # Build layout
         self._build_header()
@@ -118,6 +126,7 @@ class MoneytodoApp(tk.Tk):
             ("categories","🗂️ Quản Lý Danh Mục"),
             ("planned",   "📋 Dự Chi Cố Định"),
             ("reminders", "🔔 Ghi Chú & Nhắc Nhở"),
+            ("reports",   "📊 Báo Cáo"),
         ]
         self._nav_buttons = {}
         for tab_id, label in nav_items:
@@ -145,6 +154,7 @@ class MoneytodoApp(tk.Tk):
             "categories": CategoriesFrame(self._content),
             "planned":    PlannedExpensesFrame(self._content),
             "reminders":  RemindersFrame(self._content),
+            "reports":    ReportsFrame(self._content),
         }
         for frame in self._frames.values():
             frame.place(relwidth=1, relheight=1)

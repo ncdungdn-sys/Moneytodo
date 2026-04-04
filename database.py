@@ -4,6 +4,7 @@ Handles SQLite database creation, connection and CRUD operations.
 """
 import sqlite3
 import os
+import hashlib
 from datetime import datetime
 
 
@@ -68,9 +69,18 @@ def init_db():
             title TEXT NOT NULL,
             note TEXT,
             remind_date TEXT NOT NULL,
+            remind_time TEXT,
             is_done INTEGER DEFAULT 0,
             notified INTEGER DEFAULT 0,
             created_at TEXT DEFAULT (datetime('now','localtime'))
+        )
+    """)
+
+    # App settings (key-value store)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
         )
     """)
 
@@ -113,6 +123,22 @@ def _migrate_db(conn):
                     (name,),
                 )
         conn.commit()
+
+    # Migration: add remind_time column to reminders if missing
+    c.execute("PRAGMA table_info(reminders)")
+    rem_cols = [row[1] for row in c.fetchall()]
+    if "remind_time" not in rem_cols:
+        c.execute("ALTER TABLE reminders ADD COLUMN remind_time TEXT")
+        conn.commit()
+
+    # Migration: create settings table if missing
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+    """)
+    conn.commit()
 
 
 def _seed_default_categories(conn):
@@ -388,7 +414,7 @@ def delete_planned_expense(pe_id):
 def get_reminders():
     conn = get_connection()
     c = conn.cursor()
-    c.execute("SELECT * FROM reminders ORDER BY remind_date ASC, id ASC")
+    c.execute("SELECT * FROM reminders ORDER BY remind_date ASC, remind_time ASC, id ASC")
     rows = [dict(r) for r in c.fetchall()]
     conn.close()
     return rows
@@ -407,12 +433,12 @@ def get_pending_reminders(today):
     return rows
 
 
-def add_reminder(title, note, remind_date):
+def add_reminder(title, note, remind_date, remind_time=None):
     conn = get_connection()
     c = conn.cursor()
     c.execute(
-        "INSERT INTO reminders (title, note, remind_date) VALUES (?, ?, ?)",
-        (title, note, remind_date),
+        "INSERT INTO reminders (title, note, remind_date, remind_time) VALUES (?, ?, ?, ?)",
+        (title, note, remind_date, remind_time),
     )
     new_id = c.lastrowid
     conn.commit()
@@ -420,11 +446,11 @@ def add_reminder(title, note, remind_date):
     return new_id
 
 
-def update_reminder(rem_id, title, note, remind_date):
+def update_reminder(rem_id, title, note, remind_date, remind_time=None):
     conn = get_connection()
     conn.execute(
-        "UPDATE reminders SET title=?, note=?, remind_date=? WHERE id=?",
-        (title, note, remind_date, rem_id),
+        "UPDATE reminders SET title=?, note=?, remind_date=?, remind_time=?, notified=0 WHERE id=?",
+        (title, note, remind_date, remind_time, rem_id),
     )
     conn.commit()
     conn.close()
@@ -452,3 +478,127 @@ def delete_reminder(rem_id):
     conn.execute("DELETE FROM reminders WHERE id=?", (rem_id,))
     conn.commit()
     conn.close()
+
+
+# ─── Settings / Password ──────────────────────────────────────────────────────
+
+def get_setting(key):
+    """Return the value for a settings key, or None if not set."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT value FROM settings WHERE key=?", (key,))
+    row = c.fetchone()
+    conn.close()
+    return row["value"] if row else None
+
+
+def set_setting(key, value):
+    """Insert or update a settings key-value pair."""
+    conn = get_connection()
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        (key, value),
+    )
+    conn.commit()
+    conn.close()
+
+
+def hash_password(pin):
+    """Return SHA-256 hex digest of a 6-digit PIN string."""
+    return hashlib.sha256(pin.encode()).hexdigest()
+
+
+def check_password(pin):
+    """Return True if pin matches the stored password hash."""
+    stored = get_setting("password_hash")
+    if stored is None:
+        return False
+    return stored == hash_password(pin)
+
+
+def has_password():
+    """Return True if a password has been set."""
+    return get_setting("password_hash") is not None
+
+
+def set_password(pin):
+    """Store a new hashed password."""
+    set_setting("password_hash", hash_password(pin))
+
+
+# ─── Report queries ───────────────────────────────────────────────────────────
+
+def get_expenses_range(from_date, to_date, type_filter=None):
+    """Fetch expenses between from_date and to_date (inclusive, YYYY-MM-DD)."""
+    conn = get_connection()
+    c = conn.cursor()
+    query = """
+        SELECT e.id, e.type, e.amount, e.description, e.expense_date,
+               cat.name AS category_name,
+               sub.name AS subcategory_name
+        FROM expenses e
+        LEFT JOIN categories cat ON e.category_id = cat.id
+        LEFT JOIN categories sub ON e.subcategory_id = sub.id
+        WHERE e.expense_date >= ? AND e.expense_date <= ?
+    """
+    params = [from_date, to_date]
+    if type_filter:
+        query += " AND e.type = ?"
+        params.append(type_filter)
+    query += " ORDER BY e.expense_date ASC, e.id ASC"
+    c.execute(query, params)
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return rows
+
+
+def get_summary_range(from_date, to_date):
+    """Return total income and expense between from_date and to_date."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        """SELECT type, SUM(amount) as total FROM expenses
+           WHERE expense_date >= ? AND expense_date <= ?
+           GROUP BY type""",
+        (from_date, to_date),
+    )
+    result = {"income": 0.0, "expense": 0.0}
+    for row in c.fetchall():
+        result[row["type"]] = row["total"] or 0.0
+    conn.close()
+    return result
+
+
+def get_daily_totals_range(from_date, to_date):
+    """Return per-day income/expense totals between from_date and to_date."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        """SELECT expense_date, type, SUM(amount) as total
+           FROM expenses
+           WHERE expense_date >= ? AND expense_date <= ?
+           GROUP BY expense_date, type
+           ORDER BY expense_date ASC""",
+        (from_date, to_date),
+    )
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return rows
+
+
+def get_category_totals_range(from_date, to_date, type_filter="expense"):
+    """Return per-category totals (expense by default) between from_date and to_date."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        """SELECT cat.name AS category, SUM(e.amount) as total
+           FROM expenses e
+           LEFT JOIN categories cat ON e.category_id = cat.id
+           WHERE e.expense_date >= ? AND e.expense_date <= ? AND e.type = ?
+           GROUP BY e.category_id
+           ORDER BY total DESC""",
+        (from_date, to_date, type_filter),
+    )
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return rows
