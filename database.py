@@ -4,11 +4,29 @@ Handles SQLite database creation, connection and CRUD operations.
 """
 import sqlite3
 import os
+import sys
 import hashlib
 from datetime import datetime
 
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "moneytodo.db")
+def _get_db_path():
+    """Return the path to the SQLite database file.
+
+    When running as a PyInstaller frozen executable, ``__file__`` resolves
+    to a temporary extraction directory that changes on every launch.  In
+    that case we place the database next to the actual ``.exe`` so that data
+    (including the saved password hash) persists between runs.
+    """
+    if getattr(sys, "frozen", False):
+        # Running inside a PyInstaller bundle – use the directory that
+        # contains the .exe file, not the temp extraction folder.
+        base_dir = os.path.dirname(sys.executable)
+    else:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base_dir, "moneytodo.db")
+
+
+DB_PATH = _get_db_path()
 
 
 def get_connection():
