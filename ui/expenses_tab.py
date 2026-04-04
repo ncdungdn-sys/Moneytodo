@@ -174,7 +174,7 @@ class ExpensesFrame(tk.Frame):
         }
         key = col_map.get(col, col)
         self._expenses.sort(
-            key=lambda r: (r.get(key) or "").lower() if isinstance(r.get(key), str) else r.get(key, 0),
+            key=lambda r: (r.get(key) or "").lower() if isinstance(r.get(key), str) else (r.get(key) or 0),
             reverse=self._sort_reverse,
         )
         self._refresh_tree()

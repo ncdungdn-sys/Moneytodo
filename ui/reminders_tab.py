@@ -176,7 +176,7 @@ class RemindersFrame(tk.Frame):
                  font=("Segoe UI", 9)).pack(pady=(4, 0))
 
         ttk.Button(popup, text="Đã Biết", command=popup.destroy).pack(pady=8)
-        popup.after(30000, popup.destroy)  # Auto-close after 30 s
+        popup.after(30000, popup.destroy)  # Auto-close after 30 seconds
 
 
 class _ReminderDialog(tk.Toplevel):

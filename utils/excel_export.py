@@ -46,7 +46,10 @@ def export_monthly_report(month: str, expenses: list, summary: dict, category_su
     if output_dir is None:
         output_dir = os.path.expanduser("~")
 
-    month_label = datetime.strptime(month, "%Y-%m").strftime("%m/%Y")
+    try:
+        month_label = datetime.strptime(month, "%Y-%m").strftime("%m/%Y")
+    except ValueError:
+        raise ValueError(f"Invalid month format. Expected YYYY-MM, got: {month}")
     filename = f"BaoCao_ThiChi_{month.replace('-', '_')}.xlsx"
     filepath = os.path.join(output_dir, filename)
 
