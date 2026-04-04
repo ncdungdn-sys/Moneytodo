@@ -28,6 +28,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             parent_id INTEGER REFERENCES categories(id) ON DELETE CASCADE,
+            type TEXT CHECK(type IN ('income', 'expense')),
             sort_order INTEGER DEFAULT 0,
             created_at TEXT DEFAULT (datetime('now','localtime'))
         )
@@ -74,8 +75,44 @@ def init_db():
     """)
 
     conn.commit()
+    _migrate_db(conn)
     _seed_default_categories(conn)
     conn.close()
+
+
+def _migrate_db(conn):
+    """Run schema migrations on existing databases."""
+    c = conn.cursor()
+
+    # Migration: add type column to categories if missing
+    c.execute("PRAGMA table_info(categories)")
+    cols = [row[1] for row in c.fetchall()]
+    if "type" not in cols:
+        c.execute("ALTER TABLE categories ADD COLUMN type TEXT CHECK(type IN ('income', 'expense'))")
+        # Mark the old "Thu nhập" parent and its children as income
+        c.execute(
+            "UPDATE categories SET type='income' WHERE parent_id IS NULL AND name='Thu nhập'"
+        )
+        c.execute("""
+            UPDATE categories SET type='income'
+            WHERE parent_id IN (
+                SELECT id FROM categories WHERE name='Thu nhập' AND parent_id IS NULL
+            )
+        """)
+        # Everything else becomes expense
+        c.execute("UPDATE categories SET type='expense' WHERE type IS NULL")
+        # Add the new income top-level categories that didn't exist before
+        for name in ("Kinh doanh", "Thưởng", "Khoản khác"):
+            c.execute(
+                "SELECT id FROM categories WHERE name=? AND parent_id IS NULL AND type='income'",
+                (name,),
+            )
+            if not c.fetchone():
+                c.execute(
+                    "INSERT INTO categories (name, parent_id, type) VALUES (?, NULL, 'income')",
+                    (name,),
+                )
+        conn.commit()
 
 
 def _seed_default_categories(conn):
@@ -85,18 +122,7 @@ def _seed_default_categories(conn):
     if c.fetchone()[0] > 0:
         return
 
-    parents = [
-        "Ăn uống",
-        "Giáo dục",
-        "Xe cộ",
-        "Điện nước",
-        "Y tế",
-        "Giải trí",
-        "Mua sắm",
-        "Thu nhập",
-        "Khác",
-    ]
-    children = {
+    expense_parents = {
         "Ăn uống": ["Ăn sáng", "Ăn trưa", "Ăn tối", "Ăn ngoài", "Đồ uống"],
         "Giáo dục": ["Học phí", "Sách vở", "Học thêm"],
         "Xe cộ": ["Xăng dầu", "Sửa chữa", "Bảo dưỡng", "Đăng kiểm"],
@@ -104,33 +130,58 @@ def _seed_default_categories(conn):
         "Y tế": ["Khám bệnh", "Thuốc men", "Bảo hiểm"],
         "Giải trí": ["Du lịch", "Phim ảnh", "Thể thao"],
         "Mua sắm": ["Quần áo", "Đồ gia dụng", "Thực phẩm"],
-        "Thu nhập": ["Lương", "Thưởng", "Kinh doanh", "Khác"],
         "Khác": [],
     }
+    income_parents = {
+        "Kinh doanh": [],
+        "Thưởng": [],
+        "Khoản khác": [],
+    }
 
-    for name in sorted(parents):
+    for name in sorted(expense_parents):
         c.execute(
-            "INSERT INTO categories (name, parent_id) VALUES (?, NULL)", (name,)
+            "INSERT INTO categories (name, parent_id, type) VALUES (?, NULL, 'expense')",
+            (name,),
         )
         parent_id = c.lastrowid
-        for child in sorted(children.get(name, [])):
+        for child in sorted(expense_parents[name]):
             c.execute(
-                "INSERT INTO categories (name, parent_id) VALUES (?, ?)",
+                "INSERT INTO categories (name, parent_id, type) VALUES (?, ?, 'expense')",
                 (child, parent_id),
             )
+
+    for name in sorted(income_parents):
+        c.execute(
+            "INSERT INTO categories (name, parent_id, type) VALUES (?, NULL, 'income')",
+            (name,),
+        )
+        parent_id = c.lastrowid
+        for child in sorted(income_parents[name]):
+            c.execute(
+                "INSERT INTO categories (name, parent_id, type) VALUES (?, ?, 'income')",
+                (child, parent_id),
+            )
+
     conn.commit()
 
 
 # ─── Category CRUD ────────────────────────────────────────────────────────────
 
-def get_categories(parent_id=None):
-    """Return list of categories. parent_id=None → root categories."""
+def get_categories(parent_id=None, type_filter=None):
+    """Return list of categories. parent_id=None → root categories.
+    type_filter='income'|'expense' → filter root categories by type."""
     conn = get_connection()
     c = conn.cursor()
     if parent_id is None:
-        c.execute(
-            "SELECT * FROM categories WHERE parent_id IS NULL ORDER BY name COLLATE NOCASE"
-        )
+        if type_filter:
+            c.execute(
+                "SELECT * FROM categories WHERE parent_id IS NULL AND type=? ORDER BY name COLLATE NOCASE",
+                (type_filter,),
+            )
+        else:
+            c.execute(
+                "SELECT * FROM categories WHERE parent_id IS NULL ORDER BY name COLLATE NOCASE"
+            )
     else:
         c.execute(
             "SELECT * FROM categories WHERE parent_id=? ORDER BY name COLLATE NOCASE",
@@ -141,19 +192,27 @@ def get_categories(parent_id=None):
     return rows
 
 
-def add_category(name, parent_id=None):
+def add_category(name, parent_id=None, type_=None):
     conn = get_connection()
     c = conn.cursor()
-    c.execute("INSERT INTO categories (name, parent_id) VALUES (?, ?)", (name, parent_id))
+    c.execute(
+        "INSERT INTO categories (name, parent_id, type) VALUES (?, ?, ?)",
+        (name, parent_id, type_),
+    )
     new_id = c.lastrowid
     conn.commit()
     conn.close()
     return new_id
 
 
-def update_category(cat_id, name):
+def update_category(cat_id, name, type_=None):
     conn = get_connection()
-    conn.execute("UPDATE categories SET name=? WHERE id=?", (name, cat_id))
+    if type_ is not None:
+        conn.execute(
+            "UPDATE categories SET name=?, type=? WHERE id=?", (name, type_, cat_id)
+        )
+    else:
+        conn.execute("UPDATE categories SET name=? WHERE id=?", (name, cat_id))
     conn.commit()
     conn.close()
 
