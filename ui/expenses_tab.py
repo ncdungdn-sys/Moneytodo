@@ -250,12 +250,18 @@ class _ExpenseDialog(tk.Toplevel):
         self.type_var = tk.StringVar(value="expense")
         type_frame = tk.Frame(frm, bg=CARD_BG)
         type_frame.grid(row=0, column=1, sticky="w", **pad)
-        tk.Radiobutton(type_frame, text="Chi", variable=self.type_var, value="expense", bg=CARD_BG).pack(side="left")
-        tk.Radiobutton(type_frame, text="Thu", variable=self.type_var, value="income", bg=CARD_BG).pack(side="left")
+        tk.Radiobutton(
+            type_frame, text="Chi", variable=self.type_var, value="expense",
+            bg=CARD_BG, command=self._on_type_change,
+        ).pack(side="left")
+        tk.Radiobutton(
+            type_frame, text="Thu", variable=self.type_var, value="income",
+            bg=CARD_BG, command=self._on_type_change,
+        ).pack(side="left")
 
         # Category
         tk.Label(frm, text="Danh Mục:", bg=CARD_BG, font=FONT_BOLD).grid(row=1, column=0, sticky="w", **pad)
-        self._cats = db.get_categories()
+        self._cats = db.get_categories(type_filter="expense")
         cat_names = [c["name"] for c in self._cats]
         self.cat_var = tk.StringVar()
         self.cat_cb = ttk.Combobox(frm, textvariable=self.cat_var, values=cat_names, state="readonly", width=22)
@@ -293,6 +299,16 @@ class _ExpenseDialog(tk.Toplevel):
         tk.Label(frm, text="Quản lý danh mục →", bg=CARD_BG, fg=ACCENT,
                  cursor="hand2", font=FONT).grid(row=7, column=1, sticky="e")
 
+    def _on_type_change(self):
+        """Reload category list when income/expense type is toggled."""
+        self._cats = db.get_categories(type_filter=self.type_var.get())
+        cat_names = [c["name"] for c in self._cats]
+        self.cat_cb["values"] = cat_names
+        self.cat_var.set("")
+        self.sub_cb["values"] = []
+        self.sub_var.set("")
+        self._subs = []
+
     def _on_cat_change(self, _event=None):
         cat_name = self.cat_var.get()
         cat = next((c for c in self._cats if c["name"] == cat_name), None)
@@ -308,6 +324,9 @@ class _ExpenseDialog(tk.Toplevel):
 
     def _populate(self, exp):
         self.type_var.set(exp["type"])
+        # Reload categories for the correct type
+        self._cats = db.get_categories(type_filter=exp["type"])
+        self.cat_cb["values"] = [c["name"] for c in self._cats]
         # Set category
         cat_name = exp.get("category_name") or ""
         self.cat_var.set(cat_name)

@@ -34,9 +34,13 @@ class CategoriesFrame(tk.Frame):
         left = tk.LabelFrame(panes, text="Danh Mục Chính", bg=BG, font=FONT_BOLD)
         left.pack(side="left", fill="both", expand=True, padx=(0, 6))
 
-        self.parent_tree = ttk.Treeview(left, columns=("name",), show="headings", selectmode="browse", height=18)
+        self.parent_tree = ttk.Treeview(
+            left, columns=("name", "type"), show="headings", selectmode="browse", height=18
+        )
         self.parent_tree.heading("name", text="Tên Danh Mục")
-        self.parent_tree.column("name", width=180)
+        self.parent_tree.heading("type", text="Loại")
+        self.parent_tree.column("name", width=150)
+        self.parent_tree.column("type", width=60, anchor="center")
         vsb = ttk.Scrollbar(left, orient="vertical", command=self.parent_tree.yview)
         self.parent_tree.configure(yscrollcommand=vsb.set)
         self.parent_tree.pack(side="left", fill="both", expand=True)
@@ -74,7 +78,8 @@ class CategoriesFrame(tk.Frame):
         for row in self.parent_tree.get_children():
             self.parent_tree.delete(row)
         for cat in self._parents:
-            self.parent_tree.insert("", "end", iid=str(cat["id"]), values=(cat["name"],))
+            type_label = "Thu" if cat.get("type") == "income" else "Chi"
+            self.parent_tree.insert("", "end", iid=str(cat["id"]), values=(cat["name"], type_label))
         # Clear children
         for row in self.child_tree.get_children():
             self.child_tree.delete(row)
@@ -93,9 +98,9 @@ class CategoriesFrame(tk.Frame):
     # ── Parent CRUD ───────────────────────────────────────────────────────────
 
     def _add_parent(self):
-        name = _ask_name(self, "Thêm Danh Mục Chính", "Tên danh mục:")
-        if name:
-            db.add_category(name)
+        result = _ask_name_and_type(self, "Thêm Danh Mục Chính")
+        if result:
+            db.add_category(result["name"], type_=result["type"])
             self.load_data()
 
     def _edit_parent(self):
@@ -105,9 +110,13 @@ class CategoriesFrame(tk.Frame):
         cat_id = int(sel[0])
         cat = next((c for c in self._parents if c["id"] == cat_id), None)
         if cat:
-            name = _ask_name(self, "Sửa Danh Mục", "Tên mới:", initial=cat["name"])
-            if name:
-                db.update_category(cat_id, name)
+            result = _ask_name_and_type(
+                self, "Sửa Danh Mục",
+                initial_name=cat["name"],
+                initial_type=cat.get("type") or "expense",
+            )
+            if result:
+                db.update_category(cat_id, result["name"], type_=result["type"])
                 self.load_data()
 
     def _delete_parent(self):
@@ -172,6 +181,49 @@ def _ask_name(parent, title, label, initial=""):
             messagebox.showerror("Lỗi", "Tên không được để trống.", parent=dlg)
             return
         result["value"] = v
+        dlg.destroy()
+
+    btn_row = tk.Frame(dlg)
+    btn_row.pack(pady=8)
+    ttk.Button(btn_row, text="OK", command=_ok).pack(side="left", padx=6)
+    ttk.Button(btn_row, text="Hủy", command=dlg.destroy).pack(side="left", padx=6)
+
+    entry.bind("<Return>", lambda e: _ok())
+    dlg.transient(parent)
+    dlg.wait_window()
+    return result["value"]
+
+
+def _ask_name_and_type(parent, title, initial_name="", initial_type="expense"):
+    """Input dialog for category name and type (Chi/Thu)."""
+    dlg = tk.Toplevel(parent)
+    dlg.title(title)
+    dlg.resizable(False, False)
+    dlg.grab_set()
+    result = {"value": None}
+
+    frm = tk.Frame(dlg, padx=16, pady=12)
+    frm.pack(fill="both", expand=True)
+
+    tk.Label(frm, text="Tên danh mục:", anchor="w").grid(row=0, column=0, sticky="w", pady=4)
+    name_var = tk.StringVar(value=initial_name)
+    entry = ttk.Entry(frm, textvariable=name_var, width=26)
+    entry.grid(row=0, column=1, padx=(8, 0), pady=4)
+    entry.focus_set()
+
+    tk.Label(frm, text="Loại:", anchor="w").grid(row=1, column=0, sticky="w", pady=4)
+    type_var = tk.StringVar(value=initial_type)
+    type_frm = tk.Frame(frm)
+    type_frm.grid(row=1, column=1, sticky="w", padx=(8, 0))
+    ttk.Radiobutton(type_frm, text="Chi", variable=type_var, value="expense").pack(side="left")
+    ttk.Radiobutton(type_frm, text="Thu", variable=type_var, value="income").pack(side="left")
+
+    def _ok():
+        v = name_var.get().strip()
+        if not v:
+            messagebox.showerror("Lỗi", "Tên không được để trống.", parent=dlg)
+            return
+        result["value"] = {"name": v, "type": type_var.get()}
         dlg.destroy()
 
     btn_row = tk.Frame(dlg)
