@@ -271,8 +271,10 @@ class _ExpenseDialog(tk.Toplevel):
         # Subcategory
         tk.Label(frm, text="Danh Mục Con:", bg=CARD_BG, font=FONT_BOLD).grid(row=2, column=0, sticky="w", **pad)
         self.sub_var = tk.StringVar()
-        self.sub_cb = ttk.Combobox(frm, textvariable=self.sub_var, state="readonly", width=22)
+        self.sub_cb = ttk.Combobox(frm, textvariable=self.sub_var, width=22)
         self.sub_cb.grid(row=2, column=1, sticky="w", **pad)
+        tk.Label(frm, text="(không bắt buộc)", bg=CARD_BG, fg="#7F8C8D",
+                 font=("Segoe UI", 9)).grid(row=2, column=2, sticky="w", padx=2)
 
         # Amount
         tk.Label(frm, text="Số Tiền (₫):", bg=CARD_BG, font=FONT_BOLD).grid(row=3, column=0, sticky="w", **pad)
@@ -316,7 +318,7 @@ class _ExpenseDialog(tk.Toplevel):
             subs = db.get_categories(parent_id=cat["id"])
             sub_names = [s["name"] for s in subs]
             self.sub_cb["values"] = sub_names
-            self.sub_var.set(sub_names[0] if sub_names else "")
+            self.sub_var.set("")  # Keep blank – subcategory is optional
             self._subs = subs
         else:
             self.sub_cb["values"] = []
