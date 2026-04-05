@@ -620,3 +620,55 @@ def get_category_totals_range(from_date, to_date, type_filter="expense"):
     rows = [dict(r) for r in c.fetchall()]
     conn.close()
     return rows
+
+
+def get_daily_summary(expense_date):
+    """Get income, expense, and category breakdown for a specific date.
+
+    Returns a dict:
+        {
+            'date': '2026-04-05',
+            'income': 500000.0,
+            'expense': 125187.0,
+            'categories': [{'category': 'Ăn uống', 'total': 87000.0}, ...]
+        }
+    """
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "SELECT type, SUM(amount) as total FROM expenses WHERE expense_date=? GROUP BY type",
+        (expense_date,),
+    )
+    result = {"date": expense_date, "income": 0.0, "expense": 0.0, "categories": []}
+    for row in c.fetchall():
+        result[row["type"]] = row["total"] or 0.0
+    c.execute(
+        """SELECT cat.name AS category, SUM(e.amount) as total
+           FROM expenses e
+           LEFT JOIN categories cat ON e.category_id = cat.id
+           WHERE e.expense_date = ? AND e.type = 'expense'
+           GROUP BY e.category_id
+           ORDER BY total DESC""",
+        (expense_date,),
+    )
+    result["categories"] = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return result
+
+
+def get_daily_summaries_range(from_date, to_date):
+    """Get daily summaries for all dates in a range, ordered by date DESC.
+
+    Returns a list of dicts, each as returned by get_daily_summary().
+    """
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        """SELECT DISTINCT expense_date FROM expenses
+           WHERE expense_date >= ? AND expense_date <= ?
+           ORDER BY expense_date DESC""",
+        (from_date, to_date),
+    )
+    dates = [row["expense_date"] for row in c.fetchall()]
+    conn.close()
+    return [get_daily_summary(d) for d in dates]
