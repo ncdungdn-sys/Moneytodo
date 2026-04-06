@@ -107,6 +107,7 @@ def init_db():
     _migrate_db(conn)
     _seed_default_categories(conn)
     _create_exercise_tables(conn)
+    _create_password_tables(conn)
     conn.close()
 
 
@@ -908,3 +909,165 @@ def get_exercise_stats_today(session_id):
     stats["total"] = stats["completed"] + stats["skipped"] + stats["pending"]
     conn.close()
     return stats
+
+
+# ── Password Manager ──────────────────────────────────────────────────────────
+
+def _create_password_tables(conn):
+    """Create password manager tables."""
+    c = conn.cursor()
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS master_password (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            password_hash TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now','localtime')),
+            updated_at TEXT DEFAULT (datetime('now','localtime'))
+        )
+    """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS passwords (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            category TEXT NOT NULL,
+            account_name TEXT NOT NULL,
+            password TEXT NOT NULL,
+            notes TEXT,
+            created_at TEXT DEFAULT (datetime('now','localtime')),
+            updated_at TEXT DEFAULT (datetime('now','localtime'))
+        )
+    """)
+
+    conn.commit()
+
+
+def _hash_master_password(password):
+    """Return SHA-256 hex digest of the given password string."""
+    return hashlib.sha256(password.encode("utf-8")).hexdigest()
+
+
+def set_master_password(password):
+    """Set the master password (first time only). Returns True on success."""
+    try:
+        pw_hash = _hash_master_password(password)
+        conn = get_connection()
+        c = conn.cursor()
+        c.execute(
+            "INSERT OR REPLACE INTO master_password (id, password_hash) VALUES (1, ?)",
+            (pw_hash,),
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+
+def verify_master_password(password):
+    """Verify the master password against the stored hash. Returns True if correct."""
+    pw_hash = _hash_master_password(password)
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT password_hash FROM master_password WHERE id = 1")
+    row = c.fetchone()
+    conn.close()
+    if row is None:
+        return False
+    return row["password_hash"] == pw_hash
+
+
+def master_password_exists():
+    """Return True if a master password has already been set."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT COUNT(*) FROM master_password WHERE id = 1")
+    count = c.fetchone()[0]
+    conn.close()
+    return count > 0
+
+
+def add_password(category, account_name, password, notes=""):
+    """Add a new password entry. Returns the new row id."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "INSERT INTO passwords (category, account_name, password, notes) VALUES (?, ?, ?, ?)",
+        (category, account_name, password, notes),
+    )
+    new_id = c.lastrowid
+    conn.commit()
+    conn.close()
+    return new_id
+
+
+def update_password(password_id, category, account_name, password, notes=""):
+    """Update an existing password entry."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        """UPDATE passwords
+           SET category=?, account_name=?, password=?, notes=?,
+               updated_at=datetime('now','localtime')
+           WHERE id=?""",
+        (category, account_name, password, notes, password_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def delete_password(password_id):
+    """Delete a password entry."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("DELETE FROM passwords WHERE id=?", (password_id,))
+    conn.commit()
+    conn.close()
+
+
+def get_all_passwords():
+    """Return all passwords sorted by category then account_name.
+
+    Returns a list of tuples: (id, category, account_name, password, notes).
+    """
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "SELECT id, category, account_name, password, notes FROM passwords ORDER BY category, account_name"
+    )
+    rows = [(r["id"], r["category"], r["account_name"], r["password"], r["notes"]) for r in c.fetchall()]
+    conn.close()
+    return rows
+
+
+def search_passwords(keyword):
+    """Search passwords by account_name or category (case-insensitive).
+
+    Returns a list of tuples: (id, category, account_name, password, notes).
+    """
+    conn = get_connection()
+    c = conn.cursor()
+    pattern = f"%{keyword}%"
+    c.execute(
+        """SELECT id, category, account_name, password, notes FROM passwords
+           WHERE account_name LIKE ? OR category LIKE ?
+           ORDER BY category, account_name""",
+        (pattern, pattern),
+    )
+    rows = [(r["id"], r["category"], r["account_name"], r["password"], r["notes"]) for r in c.fetchall()]
+    conn.close()
+    return rows
+
+
+def get_password_by_id(password_id):
+    """Return a single password entry as a tuple (id, category, account_name, password, notes)."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "SELECT id, category, account_name, password, notes FROM passwords WHERE id=?",
+        (password_id,),
+    )
+    row = c.fetchone()
+    conn.close()
+    if row is None:
+        return None
+    return (row["id"], row["category"], row["account_name"], row["password"], row["notes"])
