@@ -935,6 +935,25 @@ def toggle_exercise_active(exercise_id):
     return new_state
 
 
+def set_exercise_active(exercise_id, state):
+    """Set is_active for a single exercise. state: 1 (active) or 0 (inactive)."""
+    conn = get_connection()
+    conn.execute(
+        "UPDATE exercise_reminders SET is_active=? WHERE id=?",
+        (1 if state else 0, exercise_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def set_all_exercises_active(state):
+    """Set is_active for all exercises. state: 1 (active) or 0 (inactive)."""
+    conn = get_connection()
+    conn.execute("UPDATE exercise_reminders SET is_active=?", (1 if state else 0,))
+    conn.commit()
+    conn.close()
+
+
 def get_active_exercises():
     """Get only exercises where is_active = 1, sorted."""
     conn = get_connection()

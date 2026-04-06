@@ -347,35 +347,17 @@ class ExerciseReminderFrame(tk.Frame):
 
     def _on_exercise_checkbox_toggle(self, exercise_id, new_state):
         """Save is_active to DB immediately on checkbox toggle."""
-        conn = db.get_connection()
-        try:
-            conn.execute(
-                "UPDATE exercise_reminders SET is_active=? WHERE id=?",
-                (1 if new_state else 0, exercise_id),
-            )
-            conn.commit()
-        finally:
-            conn.close()
+        db.set_exercise_active(exercise_id, new_state)
         self._update_active_count()
 
     def _select_all_exercises(self):
         """Set is_active=1 for all exercises."""
-        conn = db.get_connection()
-        try:
-            conn.execute("UPDATE exercise_reminders SET is_active=1")
-            conn.commit()
-        finally:
-            conn.close()
+        db.set_all_exercises_active(1)
         self._refresh_exercise_list()
 
     def _deselect_all_exercises(self):
         """Set is_active=0 for all exercises."""
-        conn = db.get_connection()
-        try:
-            conn.execute("UPDATE exercise_reminders SET is_active=0")
-            conn.commit()
-        finally:
-            conn.close()
+        db.set_all_exercises_active(0)
         self._refresh_exercise_list()
 
     # ── History Panel ─────────────────────────────────────────────────────────
