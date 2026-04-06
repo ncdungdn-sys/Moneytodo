@@ -110,7 +110,44 @@ def init_db():
     _create_password_tables(conn)
     _create_contact_tables(conn)
     _create_shopping_list_table(conn)
+    create_indexes(conn)
     conn.close()
+
+
+def create_indexes(conn=None):
+    """Create indexes on the expenses table to improve query performance.
+
+    Uses IF NOT EXISTS so it is safe to call on every startup without
+    duplicating indexes or raising errors on existing databases.
+    Logs each index that is newly created.
+    """
+    close_conn = conn is None
+    if close_conn:
+        conn = get_connection()
+    c = conn.cursor()
+
+    index_ddls = [
+        "CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(expense_date)",
+        "CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses(category_id)",
+        "CREATE INDEX IF NOT EXISTS idx_expenses_subcategory ON expenses(subcategory_id)",
+        "CREATE INDEX IF NOT EXISTS idx_expenses_type ON expenses(type)",
+        "CREATE INDEX IF NOT EXISTS idx_expenses_date_category ON expenses(expense_date, category_id)",
+    ]
+
+    # Fetch existing indexes to detect which ones are newly created
+    c.execute("PRAGMA index_list(expenses)")
+    existing = {row[1] for row in c.fetchall()}
+
+    for ddl in index_ddls:
+        # Extract the index name from the DDL: "CREATE INDEX IF NOT EXISTS <name> ON ..."
+        index_name = ddl.split()[5]
+        c.execute(ddl)
+        if index_name not in existing:
+            print(f"[create_indexes] ✅ Created index: {index_name}")
+
+    conn.commit()
+    if close_conn:
+        conn.close()
 
 
 def _create_exercise_tables(conn):
