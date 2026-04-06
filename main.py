@@ -22,6 +22,7 @@ from ui.reminders_tab import RemindersFrame
 from ui.reports_tab import ReportsFrame
 from ui.exercise_reminder_tab import ExerciseReminderFrame
 from ui.login_screen import LoginScreen
+from ui.passwords_tab import PasswordsFrame
 from utils.exercise_reminder import start_monitor
 
 # ── Colour palette ───────────────────────────────────────────────────────────
@@ -133,6 +134,7 @@ class MoneytodoApp(tk.Tk):
             ("reminders", "🔔 Ghi Chú & Nhắc Nhở"),
             ("reports",   "📊 Báo Cáo"),
             ("exercise",  "🏋️ Tập Thể Dục"),
+            ("passwords", "🔒 Quản Lý Mật Khẩu"),
         ]
         self._nav_buttons = {}
         for tab_id, label in nav_items:
@@ -162,6 +164,7 @@ class MoneytodoApp(tk.Tk):
             "reminders":  RemindersFrame(self._content),
             "reports":    ReportsFrame(self._content),
             "exercise":   ExerciseReminderFrame(self._content),
+            "passwords":  PasswordsFrame(self._content),
         }
         for frame in self._frames.values():
             frame.place(relwidth=1, relheight=1)
@@ -169,6 +172,18 @@ class MoneytodoApp(tk.Tk):
     # ── Tab switching ─────────────────────────────────────────────────────────
 
     def _show_tab(self, tab_id):
+        prev_tab = getattr(self, "_active_tab", None)
+
+        # Lock the password manager session when the user leaves that tab
+        if prev_tab == "passwords" and tab_id != "passwords":
+            self._frames["passwords"].lock_session()
+
+        # For the passwords tab, authentication must succeed before switching
+        if tab_id == "passwords":
+            if not self._frames["passwords"].request_access():
+                # Authentication cancelled or failed – stay on current tab
+                return
+
         self._active_tab = tab_id
         for tid, frame in self._frames.items():
             if tid == tab_id:
