@@ -1193,16 +1193,22 @@ def add_contact(name, age=None, phone="", email="", address="", notes=""):
     if not name:
         raise ValueError("Tên liên hệ không được để trống.")
     conn = get_connection()
-    c = conn.cursor()
-    c.execute(
-        """INSERT INTO contacts (name, age, phone, email, address, notes)
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        (name, age if age else None, phone or "", email or "", address or "", notes or ""),
-    )
-    conn.commit()
-    new_id = c.lastrowid
-    conn.close()
-    return new_id
+    try:
+        c = conn.cursor()
+        c.execute(
+            """INSERT INTO contacts (name, age, phone, email, address, notes)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (name, age if age else None, phone or "", email or "", address or "", notes or ""),
+        )
+        conn.commit()
+        new_id = c.lastrowid
+        return new_id
+    except Exception as e:
+        print(f"[add_contact] Error: {e}")
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def update_contact(contact_id, name, age=None, phone="", email="", address="", notes=""):
@@ -1211,17 +1217,23 @@ def update_contact(contact_id, name, age=None, phone="", email="", address="", n
     if not name:
         raise ValueError("Tên liên hệ không được để trống.")
     conn = get_connection()
-    c = conn.cursor()
-    c.execute(
-        """UPDATE contacts
-           SET name=?, age=?, phone=?, email=?, address=?, notes=?,
-               updated_at=datetime('now','localtime')
-           WHERE id=?""",
-        (name, age if age else None, phone or "", email or "", address or "", notes or "", contact_id),
-    )
-    conn.commit()
-    conn.close()
-    return True
+    try:
+        c = conn.cursor()
+        c.execute(
+            """UPDATE contacts
+               SET name=?, age=?, phone=?, email=?, address=?, notes=?,
+                   updated_at=datetime('now','localtime')
+               WHERE id=?""",
+            (name, age if age else None, phone or "", email or "", address or "", notes or "", contact_id),
+        )
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"[update_contact] Error: {e}")
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def delete_contact(contact_id):
