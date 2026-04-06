@@ -45,8 +45,10 @@ def _monitor_loop():
     while not _stop_event.is_set():
         try:
             _check_sessions()
-        except Exception:
-            pass
+        except Exception as exc:
+            # Log to stderr; don't crash the monitor thread
+            import traceback
+            traceback.print_exc()
         _stop_event.wait(CHECK_INTERVAL)
 
 

@@ -8,6 +8,7 @@ Modes:
 Background events are received via the queue from utils.exercise_reminder
 and dispatched to the UI every 2 seconds using Tkinter's after() mechanism.
 """
+import queue as _queue
 import tkinter as tk
 from tkinter import ttk, messagebox
 from datetime import datetime, timedelta
@@ -404,12 +405,15 @@ class ExerciseReminderFrame(tk.Frame):
         completed = stats["completed"]
         skipped = stats["skipped"]
 
-        pct = round(completed / total * 100) if total > 0 else 0
+        def _pct(count):
+            return round(count / total * 100) if total > 0 else 0
+
+        completed_pct = _pct(completed)
         self._stat_total.config(text=str(total))
-        self._stat_completed.config(text=f"{completed} ({pct}%)")
-        self._stat_skipped.config(text=f"{skipped} ({round(skipped/total*100) if total else 0}%)")
-        self._progress_var.set(pct)
-        self._progress_pct.config(text=f"{pct}%")
+        self._stat_completed.config(text=f"{completed} ({completed_pct}%)")
+        self._stat_skipped.config(text=f"{skipped} ({_pct(skipped)}%)")
+        self._progress_var.set(completed_pct)
+        self._progress_pct.config(text=f"{completed_pct}%")
 
     # ─────────────────────────────────────────────────────────────────────────
     # Session Controls
@@ -445,19 +449,26 @@ class ExerciseReminderFrame(tk.Frame):
         # If there's a pending history entry, update it; otherwise create new
         pending = [h for h in history if h["status"] == "pending"]
         if pending:
-            conn = db.get_connection()
-            conn.execute(
-                "UPDATE exercise_history SET status='skipped' WHERE id=?",
-                (pending[-1]["id"],),
-            )
-            conn.commit()
-            conn.close()
+            self._set_history_status(pending[-1]["id"], "skipped")
         else:
             if exercises:
                 ex = exercises[done_count % len(exercises)]
                 db.add_exercise_history(self._session["id"], ex["exercise_name"], now_str, "skipped")
 
         self.load_data()
+
+    @staticmethod
+    def _set_history_status(history_id, status):
+        """Update the status of an exercise_history record."""
+        conn = db.get_connection()
+        try:
+            conn.execute(
+                "UPDATE exercise_history SET status=? WHERE id=?",
+                (status, history_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
 
     def _get_interval(self):
         val = self._interval_var.get()
@@ -476,14 +487,16 @@ class ExerciseReminderFrame(tk.Frame):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _save_config(self):
-        # Persist exercise enabled/disabled state
-        for ex_id, var in self._exercise_check_vars.items():
-            conn = db.get_connection()
-            conn.execute(
-                "UPDATE exercise_reminders SET is_enabled=? WHERE id=?",
-                (1 if var.get() else 0, ex_id),
-            )
+        # Persist all exercise enabled/disabled states in a single transaction
+        conn = db.get_connection()
+        try:
+            for ex_id, var in self._exercise_check_vars.items():
+                conn.execute(
+                    "UPDATE exercise_reminders SET is_enabled=? WHERE id=?",
+                    (1 if var.get() else 0, ex_id),
+                )
             conn.commit()
+        finally:
             conn.close()
         messagebox.showinfo("Thành công", "Cấu hình đã được lưu.", parent=self)
         self._refresh_exercise_list()
@@ -505,7 +518,7 @@ class ExerciseReminderFrame(tk.Frame):
             while True:
                 event = self._event_queue.get_nowait()
                 self._handle_event(event)
-        except Exception:
+        except _queue.Empty:
             pass
         self.after(POLL_MS, self._poll_queue)
 
@@ -551,25 +564,13 @@ class ExerciseReminderFrame(tk.Frame):
 
         def _complete():
             if history_id:
-                conn = db.get_connection()
-                conn.execute(
-                    "UPDATE exercise_history SET status='completed' WHERE id=?",
-                    (history_id,),
-                )
-                conn.commit()
-                conn.close()
+                self._set_history_status(history_id, "completed")
             self.load_data()
             popup.destroy()
 
         def _skip():
             if history_id:
-                conn = db.get_connection()
-                conn.execute(
-                    "UPDATE exercise_history SET status='skipped' WHERE id=?",
-                    (history_id,),
-                )
-                conn.commit()
-                conn.close()
+                self._set_history_status(history_id, "skipped")
             self.load_data()
             popup.destroy()
 
