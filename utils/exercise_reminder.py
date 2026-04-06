@@ -90,8 +90,8 @@ def _check_sessions():
     next_reminder_dt = start_dt + timedelta(minutes=interval_minutes * (completed_count + 1))
 
     if now >= next_reminder_dt:
-        # Pick next exercise (cycle through enabled exercises in sorted order)
-        exercises = [e for e in db.get_exercises_sorted() if e.get("is_enabled", 1)]
+        # Pick next exercise (cycle through active exercises in sorted order)
+        exercises = db.get_active_exercises()
         if not exercises:
             return
         exercise = exercises[completed_count % len(exercises)]

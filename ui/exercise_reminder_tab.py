@@ -224,15 +224,10 @@ class ExerciseReminderFrame(tk.Frame):
                 stop_row, text=label, variable=self._auto_stop_var, value=val,
             ).pack(side="left", padx=4)
 
-        # Exercise list
-        tk.Label(inner, text="Danh sách bài tập:", bg=CARD_BG, font=FONT_BOLD).pack(anchor="w", pady=(4, 2))
-
-        list_frame = tk.Frame(inner, bg=CARD_BG)
-        list_frame.pack(fill="both")
-
-        self._exercise_list_frame = list_frame
+        # Exercise list section with 2-column layout
         self._exercise_check_vars = {}
-        self._refresh_exercise_list()
+        self._active_count_var = tk.StringVar(value="Bài tập hôm nay (0/0)")
+        self._build_exercise_list_section(inner)
 
         # Buttons
         btn_row = tk.Frame(inner, bg=CARD_BG)
@@ -240,28 +235,130 @@ class ExerciseReminderFrame(tk.Frame):
         ttk.Button(btn_row, text="💾 Lưu Cấu hình", command=self._save_config).pack(side="left", padx=2)
         ttk.Button(btn_row, text="➕ Thêm Bài Tập", command=self._open_add_exercise_dialog).pack(side="left", padx=2)
 
+    def _build_exercise_list_section(self, parent):
+        """Create the 2-column exercise list layout with active count header."""
+        # Header: count label + select/deselect all buttons
+        header_row = tk.Frame(parent, bg=CARD_BG)
+        header_row.pack(fill="x", pady=(4, 2))
+        tk.Label(header_row, text="🏋️ Danh sách bài tập:", bg=CARD_BG, font=FONT_BOLD).pack(side="left")
+
+        sel_frame = tk.Frame(parent, bg=CARD_BG)
+        sel_frame.pack(fill="x", pady=(0, 4))
+        tk.Label(sel_frame, textvariable=self._active_count_var,
+                 bg=CARD_BG, fg=ACCENT, font=FONT_BOLD).pack(side="left")
+        ttk.Button(sel_frame, text="Chọn tất cả",
+                   command=self._select_all_exercises).pack(side="right", padx=2)
+        ttk.Button(sel_frame, text="Xóa tất cả",
+                   command=self._deselect_all_exercises).pack(side="right", padx=2)
+
+        # Scrollable container
+        list_outer = tk.Frame(parent, bg=CARD_BG)
+        list_outer.pack(fill="both", expand=True)
+
+        canvas = tk.Canvas(list_outer, bg=CARD_BG, highlightthickness=0, height=240)
+        scrollbar = ttk.Scrollbar(list_outer, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        self._exercise_list_frame = tk.Frame(canvas, bg=CARD_BG)
+        _canvas_frame = canvas.create_window((0, 0), window=self._exercise_list_frame, anchor="nw")
+
+        def _on_frame_configure(evt):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        def _on_canvas_configure(evt):
+            canvas.itemconfig(_canvas_frame, width=evt.width)
+
+        self._exercise_list_frame.bind("<Configure>", _on_frame_configure)
+        canvas.bind("<Configure>", _on_canvas_configure)
+
+        # Mouse-wheel scrolling
+        def _on_mousewheel(evt):
+            canvas.yview_scroll(int(-1 * (evt.delta / 120)), "units")
+
+        canvas.bind("<MouseWheel>", _on_mousewheel)
+        self._exercise_list_frame.bind("<MouseWheel>", _on_mousewheel)
+
+        self._refresh_exercise_list()
+
     def _refresh_exercise_list(self):
+        """Rebuild the 2-column exercise list."""
         for widget in self._exercise_list_frame.winfo_children():
             widget.destroy()
         self._exercise_check_vars.clear()
+
         exercises = db.get_exercises_sorted()
-        for ex in exercises:
-            var = tk.BooleanVar(value=bool(ex.get("is_enabled", 1)))
-            self._exercise_check_vars[ex["id"]] = var
-            row = tk.Frame(self._exercise_list_frame, bg=CARD_BG)
-            row.pack(fill="x")
-            ttk.Checkbutton(row, text=ex["exercise_name"], variable=var).pack(side="left")
-            if ex.get("description"):
-                tk.Label(row, text=f"({ex['description']})",
-                         bg=CARD_BG, fg=TEXT_MUTED, font=FONT_SMALL).pack(side="left", padx=4)
-            tk.Button(
-                row, text="🗑️", bg=CARD_BG, relief="flat", cursor="hand2",
-                command=lambda eid=ex["id"]: self._delete_exercise(eid),
-            ).pack(side="right")
-            tk.Button(
-                row, text="✏️", bg=CARD_BG, relief="flat", cursor="hand2",
-                command=lambda item=ex: self._open_edit_exercise_dialog(item),
-            ).pack(side="right")
+        total = len(exercises)
+        mid = (total + 1) // 2  # left column gets the larger half when odd
+
+        self._exercise_list_frame.columnconfigure(0, weight=1)
+        self._exercise_list_frame.columnconfigure(1, weight=1)
+
+        left_col = tk.Frame(self._exercise_list_frame, bg=CARD_BG)
+        left_col.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
+
+        right_col = tk.Frame(self._exercise_list_frame, bg=CARD_BG)
+        right_col.grid(row=0, column=1, sticky="nsew")
+
+        for i, ex in enumerate(exercises):
+            col = left_col if i < mid else right_col
+            self._create_exercise_item(col, ex)
+
+        self._update_active_count()
+
+    def _create_exercise_item(self, parent, ex):
+        """Create one exercise item: checkbox, name, edit/delete buttons."""
+        ex_id = ex["id"]
+        var = tk.BooleanVar(value=bool(ex.get("is_active", 1)))
+        self._exercise_check_vars[ex_id] = var
+
+        item_frame = tk.Frame(parent, bg=CARD_BG)
+        item_frame.pack(fill="x", pady=1)
+
+        top_row = tk.Frame(item_frame, bg=CARD_BG)
+        top_row.pack(fill="x")
+        ttk.Checkbutton(
+            top_row,
+            text=ex["exercise_name"],
+            variable=var,
+            command=lambda eid=ex_id, v=var: self._on_exercise_checkbox_toggle(eid, v.get()),
+        ).pack(side="left", fill="x", expand=True)
+
+        btn_row = tk.Frame(item_frame, bg=CARD_BG)
+        btn_row.pack(fill="x")
+        tk.Button(
+            btn_row, text="✏️", bg=CARD_BG, relief="flat", cursor="hand2",
+            font=FONT_SMALL,
+            command=lambda item=ex: self._open_edit_exercise_dialog(item),
+        ).pack(side="left")
+        tk.Button(
+            btn_row, text="🗑️", bg=CARD_BG, relief="flat", cursor="hand2",
+            font=FONT_SMALL,
+            command=lambda eid=ex_id: self._delete_exercise(eid),
+        ).pack(side="left")
+
+        tk.Frame(item_frame, bg="#E8E8E8", height=1).pack(fill="x", pady=(2, 0))
+
+    def _update_active_count(self):
+        """Update the 'Bài tập hôm nay (X/total)' display."""
+        active, total = db.count_active_exercises()
+        self._active_count_var.set(f"Bài tập hôm nay ({active}/{total})")
+
+    def _on_exercise_checkbox_toggle(self, exercise_id, new_state):
+        """Save is_active to DB immediately on checkbox toggle."""
+        db.set_exercise_active(exercise_id, new_state)
+        self._update_active_count()
+
+    def _select_all_exercises(self):
+        """Set is_active=1 for all exercises."""
+        db.set_all_exercises_active(1)
+        self._refresh_exercise_list()
+
+    def _deselect_all_exercises(self):
+        """Set is_active=0 for all exercises."""
+        db.set_all_exercises_active(0)
+        self._refresh_exercise_list()
 
     # ── History Panel ─────────────────────────────────────────────────────────
 
@@ -373,7 +470,7 @@ class ExerciseReminderFrame(tk.Frame):
         self._next_time_var.set(self._next_reminder_dt.strftime("%H:%M"))
 
         # Pick next exercise
-        exercises = [e for e in db.get_exercises_sorted() if e.get("is_enabled", 1)]
+        exercises = db.get_active_exercises()
         if exercises:
             next_ex = exercises[done_count % len(exercises)]
             self._exercise_var.set(next_ex["exercise_name"])
@@ -446,7 +543,7 @@ class ExerciseReminderFrame(tk.Frame):
         if not self._session:
             return
         now_str = datetime.now().strftime("%H:%M")
-        exercises = [e for e in db.get_exercises_sorted() if e.get("is_enabled", 1)]
+        exercises = db.get_active_exercises()
         history = db.get_exercise_history_today(self._session["id"])
         done_count = len([h for h in history if h["status"] in ("completed", "skipped")])
 
@@ -491,19 +588,8 @@ class ExerciseReminderFrame(tk.Frame):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _save_config(self):
-        # Persist all exercise enabled/disabled states in a single transaction
-        conn = db.get_connection()
-        try:
-            for ex_id, var in self._exercise_check_vars.items():
-                conn.execute(
-                    "UPDATE exercise_reminders SET is_enabled=? WHERE id=?",
-                    (1 if var.get() else 0, ex_id),
-                )
-            conn.commit()
-        finally:
-            conn.close()
-        messagebox.showinfo("Thành công", "Cấu hình đã được lưu.", parent=self)
-        self._refresh_exercise_list()
+        """Save session configuration settings."""
+        messagebox.showinfo("Thành công", "Cấu hình đã được lưu.\n(Trạng thái bài tập được lưu tự động.)", parent=self)
 
     def _open_add_exercise_dialog(self):
         _ExerciseDialog(self)
