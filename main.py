@@ -21,6 +21,7 @@ from ui.reminders_tab import RemindersFrame
 from ui.exercise_reminder_tab import ExerciseReminderFrame
 from ui.login_screen import LoginScreen
 from ui.passwords_tab import PasswordsFrame
+from ui.shopping_list_tab import ShoppingListFrame
 from utils.exercise_reminder import start_monitor
 
 # ── Colour palette ───────────────────────────────────────────────────────────
@@ -129,6 +130,7 @@ class MoneytodoApp(tk.Tk):
             ("expenses",  "💰 Thu Chi Hàng Ngày"),
             ("thu_chi",   "📊 Thu Chi"),
             ("reminders", "🔔 Ghi Chú Việc Làm"),
+            ("shopping",  "🛒 Mua Sắm"),
             ("exercise",  "🏋️ Tập Thể Dục"),
             ("passwords", "🔒 Quản Lý Mật Khẩu"),
         ]
@@ -157,6 +159,7 @@ class MoneytodoApp(tk.Tk):
             "expenses":   ExpensesFrame(self._content),
             "thu_chi":    IncomeExpenseManagementFrame(self._content),
             "reminders":  RemindersFrame(self._content),
+            "shopping":   ShoppingListFrame(self._content),
             "exercise":   ExerciseReminderFrame(self._content),
             "passwords":  PasswordsFrame(self._content),
         }
