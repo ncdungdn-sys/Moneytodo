@@ -1075,15 +1075,23 @@ def master_password_exists():
 def add_password(category, account_name, password, notes=""):
     """Add a new password entry. Returns the new row id."""
     conn = get_connection()
-    c = conn.cursor()
-    c.execute(
-        "INSERT INTO passwords (category, account_name, password, notes) VALUES (?, ?, ?, ?)",
-        (category, account_name, password, notes),
-    )
-    new_id = c.lastrowid
-    conn.commit()
-    conn.close()
-    return new_id
+    try:
+        _create_password_tables(conn)
+        c = conn.cursor()
+        c.execute(
+            "INSERT INTO passwords (category, account_name, password, notes) VALUES (?, ?, ?, ?)",
+            (category, account_name, password, notes),
+        )
+        conn.commit()
+        new_id = c.lastrowid
+        print(f"[add_password] ✅ Saved: id={new_id}, account={account_name!r}")
+        return new_id
+    except Exception as e:
+        print(f"[add_password] ❌ Error: {e}")
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def update_password(password_id, category, account_name, password, notes=""):
@@ -1116,13 +1124,20 @@ def get_all_passwords():
     Returns a list of tuples: (id, category, account_name, password, notes).
     """
     conn = get_connection()
-    c = conn.cursor()
-    c.execute(
-        "SELECT id, category, account_name, password, notes FROM passwords ORDER BY category, account_name"
-    )
-    rows = [(r["id"], r["category"], r["account_name"], r["password"], r["notes"]) for r in c.fetchall()]
-    conn.close()
-    return rows
+    try:
+        _create_password_tables(conn)
+        c = conn.cursor()
+        c.execute(
+            "SELECT id, category, account_name, password, notes FROM passwords ORDER BY category, account_name"
+        )
+        rows = [(r["id"], r["category"], r["account_name"], r["password"], r["notes"]) for r in c.fetchall()]
+        print(f"[get_all_passwords] ✅ Loaded {len(rows)} passwords")
+        return rows
+    except Exception as e:
+        print(f"[get_all_passwords] ❌ Error: {e}")
+        return []
+    finally:
+        conn.close()
 
 
 def search_passwords(keyword):
@@ -1194,6 +1209,7 @@ def add_contact(name, age=None, phone="", email="", address="", notes=""):
         raise ValueError("Tên liên hệ không được để trống.")
     conn = get_connection()
     try:
+        _create_contact_tables(conn)
         c = conn.cursor()
         c.execute(
             """INSERT INTO contacts (name, age, phone, email, address, notes)
@@ -1202,9 +1218,10 @@ def add_contact(name, age=None, phone="", email="", address="", notes=""):
         )
         conn.commit()
         new_id = c.lastrowid
+        print(f"[add_contact] ✅ Saved: id={new_id}, name={name!r}")
         return new_id
     except Exception as e:
-        print(f"[add_contact] Error: {e}")
+        print(f"[add_contact] ❌ Error: {e}")
         conn.rollback()
         raise
     finally:
@@ -1218,6 +1235,7 @@ def update_contact(contact_id, name, age=None, phone="", email="", address="", n
         raise ValueError("Tên liên hệ không được để trống.")
     conn = get_connection()
     try:
+        _create_contact_tables(conn)
         c = conn.cursor()
         c.execute(
             """UPDATE contacts
@@ -1227,9 +1245,10 @@ def update_contact(contact_id, name, age=None, phone="", email="", address="", n
             (name, age if age else None, phone or "", email or "", address or "", notes or "", contact_id),
         )
         conn.commit()
+        print(f"[update_contact] ✅ Updated: id={contact_id}, name={name!r}")
         return True
     except Exception as e:
-        print(f"[update_contact] Error: {e}")
+        print(f"[update_contact] ❌ Error: {e}")
         conn.rollback()
         raise
     finally:
@@ -1251,16 +1270,23 @@ def get_all_contacts():
     Returns a list of tuples: (id, name, age, phone, email, address, notes, created_at, updated_at).
     """
     conn = get_connection()
-    c = conn.cursor()
-    c.execute(
-        "SELECT id, name, age, phone, email, address, notes, created_at, updated_at FROM contacts ORDER BY name COLLATE NOCASE"
-    )
-    rows = [
-        (r["id"], r["name"], r["age"], r["phone"], r["email"], r["address"], r["notes"], r["created_at"], r["updated_at"])
-        for r in c.fetchall()
-    ]
-    conn.close()
-    return rows
+    try:
+        _create_contact_tables(conn)
+        c = conn.cursor()
+        c.execute(
+            "SELECT id, name, age, phone, email, address, notes, created_at, updated_at FROM contacts ORDER BY name COLLATE NOCASE"
+        )
+        rows = [
+            (r["id"], r["name"], r["age"], r["phone"], r["email"], r["address"], r["notes"], r["created_at"], r["updated_at"])
+            for r in c.fetchall()
+        ]
+        print(f"[get_all_contacts] ✅ Loaded {len(rows)} contacts")
+        return rows
+    except Exception as e:
+        print(f"[get_all_contacts] ❌ Error: {e}")
+        return []
+    finally:
+        conn.close()
 
 
 def search_contacts(query):
@@ -1299,3 +1325,57 @@ def get_contact_by_id(contact_id):
     if row is None:
         return None
     return (row["id"], row["name"], row["age"], row["phone"], row["email"], row["address"], row["notes"], row["created_at"], row["updated_at"])
+
+
+# ─── Debug / Verification Helpers ────────────────────────────────────────────
+
+def verify_contacts_table():
+    """Verify the contacts table exists and return its column names."""
+    conn = get_connection()
+    try:
+        c = conn.cursor()
+        c.execute("PRAGMA table_info(contacts)")
+        cols = [row[1] for row in c.fetchall()]
+        print(f"[verify_contacts_table] Columns: {cols}")
+        return cols
+    except Exception as e:
+        print(f"[verify_contacts_table] ❌ Error: {e}")
+        return []
+    finally:
+        conn.close()
+
+
+def verify_passwords_table():
+    """Verify the passwords table exists and return its column names."""
+    conn = get_connection()
+    try:
+        c = conn.cursor()
+        c.execute("PRAGMA table_info(passwords)")
+        cols = [row[1] for row in c.fetchall()]
+        print(f"[verify_passwords_table] Columns: {cols}")
+        return cols
+    except Exception as e:
+        print(f"[verify_passwords_table] ❌ Error: {e}")
+        return []
+    finally:
+        conn.close()
+
+
+def log_database_state():
+    """Log row counts for contacts and passwords tables. Returns dict with counts."""
+    conn = get_connection()
+    try:
+        c = conn.cursor()
+        c.execute("SELECT COUNT(*) FROM contacts")
+        row = c.fetchone()
+        contact_count = row[0] if row else 0
+        c.execute("SELECT COUNT(*) FROM passwords")
+        row = c.fetchone()
+        pw_count = row[0] if row else 0
+        print(f"[log_database_state] contacts={contact_count}, passwords={pw_count}")
+        return {"contacts": contact_count, "passwords": pw_count}
+    except Exception as e:
+        print(f"[log_database_state] ❌ Error: {e}")
+        return {"contacts": 0, "passwords": 0}
+    finally:
+        conn.close()
