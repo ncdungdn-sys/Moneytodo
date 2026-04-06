@@ -109,6 +109,7 @@ def init_db():
     _create_exercise_tables(conn)
     _create_password_tables(conn)
     _create_contact_tables(conn)
+    _create_shopping_list_table(conn)
     conn.close()
 
 
@@ -1412,5 +1413,102 @@ def log_database_state():
     except Exception as e:
         print(f"[log_database_state] ❌ Error: {e}")
         return {"contacts": 0, "passwords": 0}
+    finally:
+        conn.close()
+
+
+# ── Shopping List ─────────────────────────────────────────────────────────────
+
+def _create_shopping_list_table(conn):
+    """Create shopping_list table if it doesn't exist."""
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS shopping_list (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_name TEXT NOT NULL,
+            notes TEXT,
+            is_bought INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now','localtime'))
+        )
+    """)
+    conn.commit()
+
+
+def add_shopping_item(item_name, notes=""):
+    """Add a new shopping item. item_name is required. Returns the new item id."""
+    item_name = item_name.strip()
+    if not item_name:
+        raise ValueError("Tên sản phẩm không được để trống.")
+    conn = get_connection()
+    try:
+        c = conn.cursor()
+        c.execute(
+            "INSERT INTO shopping_list (item_name, notes) VALUES (?, ?)",
+            (item_name, notes or None),
+        )
+        conn.commit()
+        return c.lastrowid
+    finally:
+        conn.close()
+
+
+def update_shopping_item(item_id, item_name, notes, is_bought):
+    """Update an existing shopping item."""
+    item_name = item_name.strip()
+    if not item_name:
+        raise ValueError("Tên sản phẩm không được để trống.")
+    conn = get_connection()
+    try:
+        conn.execute(
+            "UPDATE shopping_list SET item_name=?, notes=?, is_bought=? WHERE id=?",
+            (item_name, notes or None, 1 if is_bought else 0, item_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def delete_shopping_item(item_id):
+    """Delete a shopping item by id."""
+    conn = get_connection()
+    try:
+        conn.execute("DELETE FROM shopping_list WHERE id=?", (item_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_all_shopping_items():
+    """Return all shopping items ordered by created_at."""
+    conn = get_connection()
+    try:
+        c = conn.cursor()
+        c.execute("SELECT * FROM shopping_list ORDER BY created_at ASC, id ASC")
+        return [dict(row) for row in c.fetchall()]
+    finally:
+        conn.close()
+
+
+def get_shopping_item_by_id(item_id):
+    """Return a single shopping item by id, or None."""
+    conn = get_connection()
+    try:
+        c = conn.cursor()
+        c.execute("SELECT * FROM shopping_list WHERE id=?", (item_id,))
+        row = c.fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def toggle_shopping_item_bought(item_id):
+    """Toggle the is_bought flag for a shopping item."""
+    conn = get_connection()
+    try:
+        conn.execute(
+            "UPDATE shopping_list SET is_bought = CASE WHEN is_bought=1 THEN 0 ELSE 1 END WHERE id=?",
+            (item_id,),
+        )
+        conn.commit()
     finally:
         conn.close()
