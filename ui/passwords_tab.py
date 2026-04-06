@@ -78,18 +78,20 @@ class PasswordsFrame(ttk.Frame):
         tree_frame = tk.Frame(self._manager_frame, bg=BG)
         tree_frame.pack(fill="both", expand=True, padx=10, pady=(0, 4))
 
-        cols = ("category", "account_name", "password", "notes")
+        cols = ("category", "detail", "account_name", "password", "notes")
         self._tree = ttk.Treeview(tree_frame, columns=cols, show="headings", selectmode="browse")
 
         self._tree.heading("category", text="Danh Mục")
+        self._tree.heading("detail", text="Chi Tiết")
         self._tree.heading("account_name", text="Tài Khoản")
         self._tree.heading("password", text="Mật Khẩu")
         self._tree.heading("notes", text="Ghi Chú")
 
-        self._tree.column("category", width=120, minwidth=80)
-        self._tree.column("account_name", width=200, minwidth=120)
-        self._tree.column("password", width=160, minwidth=100)
-        self._tree.column("notes", width=200, minwidth=100)
+        self._tree.column("category", width=110, minwidth=80)
+        self._tree.column("detail", width=130, minwidth=80)
+        self._tree.column("account_name", width=170, minwidth=100)
+        self._tree.column("password", width=140, minwidth=80)
+        self._tree.column("notes", width=180, minwidth=80)
 
         scrollbar = ttk.Scrollbar(tree_frame, orient="vertical", command=self._tree.yview)
         self._tree.configure(yscrollcommand=scrollbar.set)
@@ -167,9 +169,9 @@ class PasswordsFrame(ttk.Frame):
         self._tree.delete(*self._tree.get_children())
         self._item_id_map.clear()
 
-        for pw_id, category, account_name, password, notes in rows:
+        for pw_id, category, detail, account_name, password, notes in rows:
             iid = self._tree.insert(
-                "", "end", values=(category, account_name, password, notes or "")
+                "", "end", values=(category, detail or "", account_name, password or "", notes or "")
             )
             self._item_id_map[iid] = pw_id
 
@@ -180,8 +182,8 @@ class PasswordsFrame(ttk.Frame):
     def _open_add_dialog(self):
         dlg = AddPasswordDialog(self.winfo_toplevel())
         if dlg.result:
-            category, account_name, password, notes = dlg.result
-            db.add_password(category, account_name, password, notes)
+            category, detail, account_name, password, notes = dlg.result
+            db.add_password(category, detail, account_name, password, notes)
             self._refresh()
 
     def _open_edit_dialog(self):
@@ -196,8 +198,8 @@ class PasswordsFrame(ttk.Frame):
             return
         dlg = EditPasswordDialog(self.winfo_toplevel(), data)
         if dlg.result:
-            category, account_name, password, notes = dlg.result
-            db.update_password(pw_id, category, account_name, password, notes)
+            category, detail, account_name, password, notes = dlg.result
+            db.update_password(pw_id, category, detail, account_name, password, notes)
             self._refresh()
 
     def _delete_selected(self):
@@ -208,7 +210,7 @@ class PasswordsFrame(ttk.Frame):
         iid = sel[0]
         pw_id = self._item_id_map[iid]
         values = self._tree.item(iid, "values")
-        account_name = values[1] if values else "?"
+        account_name = values[2] if values else "?"
 
         if messagebox.askyesno("Xác nhận", f"Xóa mật khẩu cho '{account_name}'?", parent=self):
             db.delete_password(pw_id)
