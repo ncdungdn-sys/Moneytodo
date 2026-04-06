@@ -17,6 +17,8 @@ FONT = ("Segoe UI", 10)
 FONT_BOLD = ("Segoe UI", 10, "bold")
 FONT_HEADER = ("Segoe UI", 12, "bold")
 
+MAX_NOTES_DISPLAY_LENGTH = 80
+
 
 class ShoppingListFrame(tk.Frame):
     def __init__(self, parent):
@@ -99,7 +101,7 @@ class ShoppingListFrame(tk.Frame):
 
             bought_label = "✅ Đã Mua" if item["is_bought"] else "⬜ Chưa Mua"
             tag = "bought" if item["is_bought"] else "pending"
-            notes_display = (item["notes"] or "")[:80]
+            notes_display = (item["notes"] or "")[:MAX_NOTES_DISPLAY_LENGTH]
 
             self.tree.insert(
                 "", "end",
