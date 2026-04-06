@@ -70,9 +70,14 @@ class ContactsFrame(tk.Frame):
                               lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.bind("<Configure>",
                     lambda e: canvas.itemconfig(self._list_window, width=e.width))
-        # Mouse wheel scrolling
-        canvas.bind_all("<MouseWheel>",
-                        lambda e: canvas.yview_scroll(int(-1 * (e.delta / 120)), "units"))
+        # Mouse wheel scrolling (bind to canvas only to avoid conflicts)
+        canvas.bind("<MouseWheel>",
+                    lambda e: canvas.yview_scroll(int(-1 * (e.delta / 120)), "units"))
+        canvas.bind("<Enter>",
+                    lambda e: canvas.bind_all("<MouseWheel>",
+                                             lambda ev: canvas.yview_scroll(int(-1 * (ev.delta / 120)), "units")))
+        canvas.bind("<Leave>",
+                    lambda e: canvas.unbind_all("<MouseWheel>"))
 
         self._canvas = canvas
 
