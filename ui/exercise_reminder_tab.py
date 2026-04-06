@@ -244,7 +244,7 @@ class ExerciseReminderFrame(tk.Frame):
         for widget in self._exercise_list_frame.winfo_children():
             widget.destroy()
         self._exercise_check_vars.clear()
-        exercises = db.get_exercise_reminders()
+        exercises = db.get_exercises_sorted()
         for ex in exercises:
             var = tk.BooleanVar(value=bool(ex.get("is_enabled", 1)))
             self._exercise_check_vars[ex["id"]] = var
@@ -257,6 +257,10 @@ class ExerciseReminderFrame(tk.Frame):
             tk.Button(
                 row, text="🗑️", bg=CARD_BG, relief="flat", cursor="hand2",
                 command=lambda eid=ex["id"]: self._delete_exercise(eid),
+            ).pack(side="right")
+            tk.Button(
+                row, text="✏️", bg=CARD_BG, relief="flat", cursor="hand2",
+                command=lambda item=ex: self._open_edit_exercise_dialog(item),
             ).pack(side="right")
 
     # ── History Panel ─────────────────────────────────────────────────────────
@@ -369,7 +373,7 @@ class ExerciseReminderFrame(tk.Frame):
         self._next_time_var.set(self._next_reminder_dt.strftime("%H:%M"))
 
         # Pick next exercise
-        exercises = [e for e in db.get_exercise_reminders() if e.get("is_enabled", 1)]
+        exercises = [e for e in db.get_exercises_sorted() if e.get("is_enabled", 1)]
         if exercises:
             next_ex = exercises[done_count % len(exercises)]
             self._exercise_var.set(next_ex["exercise_name"])
@@ -442,7 +446,7 @@ class ExerciseReminderFrame(tk.Frame):
         if not self._session:
             return
         now_str = datetime.now().strftime("%H:%M")
-        exercises = [e for e in db.get_exercise_reminders() if e.get("is_enabled", 1)]
+        exercises = [e for e in db.get_exercises_sorted() if e.get("is_enabled", 1)]
         history = db.get_exercise_history_today(self._session["id"])
         done_count = len([h for h in history if h["status"] in ("completed", "skipped")])
 
@@ -503,6 +507,9 @@ class ExerciseReminderFrame(tk.Frame):
 
     def _open_add_exercise_dialog(self):
         _ExerciseDialog(self)
+
+    def _open_edit_exercise_dialog(self, item):
+        _ExerciseDialog(self, item=item)
 
     def _delete_exercise(self, ex_id):
         if messagebox.askyesno("Xác nhận", "Xóa bài tập này?", parent=self):
@@ -635,7 +642,7 @@ class _ExerciseDialog(tk.Toplevel):
         super().__init__(parent_frame)
         self.parent_frame = parent_frame
         self.item = item
-        self.title("Thêm Bài Tập" if item is None else "Sửa Bài Tập")
+        self.title("➕ Thêm Bài Tập Mới" if item is None else "✏️ Chỉnh Sửa Bài Tập")
         self.resizable(False, False)
         self.grab_set()
         self._build()
