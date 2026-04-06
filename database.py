@@ -2,6 +2,7 @@
 Database module for Moneytodo - Family Expense Manager
 Handles SQLite database creation, connection and CRUD operations.
 """
+import re
 import sqlite3
 import os
 import sys
@@ -120,6 +121,7 @@ def _create_exercise_tables(conn):
             description TEXT,
             interval_minutes INTEGER DEFAULT 30,
             is_enabled INTEGER DEFAULT 1,
+            sort_order INTEGER DEFAULT 0,
             created_at TEXT DEFAULT (datetime('now','localtime'))
         )
     """)
@@ -155,17 +157,17 @@ def _create_exercise_tables(conn):
     c.execute("SELECT COUNT(*) FROM exercise_reminders")
     if c.fetchone()[0] == 0:
         defaults = [
-            ("Hít đất", "Chống đẩy tay", 30),
-            ("Hít xà", "Kéo xà đơn", 30),
-            ("Tập tạ", "Nâng tạ tay", 30),
-            ("Stretching", "Giãn cơ toàn thân", 30),
-            ("Jogging", "Chạy bộ tại chỗ", 30),
-            ("Đứng dậy vận động", "Đứng dậy đi lại", 30),
+            ("1-Tập vai", "Shoulder exercises", 30, 1),
+            ("2-Tập lưng", "Back exercises", 30, 2),
+            ("3-Hít đất", "Push-ups", 30, 3),
+            ("4-Hít xà", "Pull-ups", 30, 4),
+            ("5-Stretching", "Flexibility", 30, 5),
+            ("6-Chạy bộ tại chỗ", "Jogging in place", 30, 6),
         ]
-        for name, desc, interval in defaults:
+        for name, desc, interval, sort_ord in defaults:
             c.execute(
-                "INSERT INTO exercise_reminders (exercise_name, description, interval_minutes) VALUES (?, ?, ?)",
-                (name, desc, interval),
+                "INSERT INTO exercise_reminders (exercise_name, description, interval_minutes, sort_order) VALUES (?, ?, ?, ?)",
+                (name, desc, interval, sort_ord),
             )
         conn.commit()
 
@@ -219,6 +221,13 @@ def _migrate_db(conn):
         )
     """)
     conn.commit()
+
+    # Migration: add sort_order column to exercise_reminders if missing
+    c.execute("PRAGMA table_info(exercise_reminders)")
+    ex_cols = [row[1] for row in c.fetchall()]
+    if ex_cols and "sort_order" not in ex_cols:
+        c.execute("ALTER TABLE exercise_reminders ADD COLUMN sort_order INTEGER DEFAULT 0")
+        conn.commit()
 
 
 def _seed_default_categories(conn):
@@ -738,8 +747,14 @@ def get_daily_summaries_range(from_date, to_date):
 
 # ─── Exercise Reminder CRUD ───────────────────────────────────────────────────
 
+def _extract_leading_number(text):
+    """Extract leading integer from a string; returns float('inf') if none."""
+    match = re.match(r'^(\d+)', text)
+    return int(match.group(1)) if match else float('inf')
+
+
 def get_exercise_reminders():
-    """Get all exercise reminders."""
+    """Get all exercise reminders ordered by id (insertion order)."""
     conn = get_connection()
     c = conn.cursor()
     c.execute("SELECT * FROM exercise_reminders ORDER BY id ASC")
@@ -748,13 +763,23 @@ def get_exercise_reminders():
     return rows
 
 
-def add_exercise_reminder(name, description, interval_minutes=30):
+def get_exercises_sorted():
+    """Get all exercises sorted by numeric prefix first, then alphabetically."""
+    rows = get_exercise_reminders()
+    rows.sort(key=lambda x: (_extract_leading_number(x['exercise_name']), x['exercise_name']))
+    return rows
+
+
+def add_exercise_reminder(name, description, interval_minutes=30, sort_order=None):
     """Add new exercise reminder."""
     conn = get_connection()
     c = conn.cursor()
+    if sort_order is None:
+        c.execute("SELECT COALESCE(MAX(sort_order), 0) + 1 FROM exercise_reminders")
+        sort_order = c.fetchone()[0]
     c.execute(
-        "INSERT INTO exercise_reminders (exercise_name, description, interval_minutes) VALUES (?, ?, ?)",
-        (name, description, interval_minutes),
+        "INSERT INTO exercise_reminders (exercise_name, description, interval_minutes, sort_order) VALUES (?, ?, ?, ?)",
+        (name, description, interval_minutes, sort_order),
     )
     new_id = c.lastrowid
     conn.commit()
@@ -762,13 +787,19 @@ def add_exercise_reminder(name, description, interval_minutes=30):
     return new_id
 
 
-def update_exercise_reminder(rem_id, name, description, interval_minutes):
+def update_exercise_reminder(rem_id, name, description, interval_minutes, sort_order=None):
     """Update exercise reminder."""
     conn = get_connection()
-    conn.execute(
-        "UPDATE exercise_reminders SET exercise_name=?, description=?, interval_minutes=? WHERE id=?",
-        (name, description, interval_minutes, rem_id),
-    )
+    if sort_order is not None:
+        conn.execute(
+            "UPDATE exercise_reminders SET exercise_name=?, description=?, interval_minutes=?, sort_order=? WHERE id=?",
+            (name, description, interval_minutes, sort_order, rem_id),
+        )
+    else:
+        conn.execute(
+            "UPDATE exercise_reminders SET exercise_name=?, description=?, interval_minutes=? WHERE id=?",
+            (name, description, interval_minutes, rem_id),
+        )
     conn.commit()
     conn.close()
 
