@@ -1,7 +1,7 @@
 """
-Login screen – 6-digit PIN authentication.
-On first launch: prompt user to create a PIN.
-On subsequent launches: prompt user to enter PIN.
+Login screen – free-text password authentication.
+On first launch: prompt user to create a password.
+On subsequent launches: prompt user to enter their password.
 """
 import tkinter as tk
 from tkinter import messagebox
@@ -22,7 +22,7 @@ FONT_SMALL = ("Segoe UI", 9)
 class LoginScreen(tk.Toplevel):
     """
     Blocking login window shown before the main app.
-    Sets self.success = True when the user authenticates or creates a PIN.
+    Sets self.success = True when the user authenticates or creates a password.
     """
 
     def __init__(self, parent):
@@ -37,7 +37,7 @@ class LoginScreen(tk.Toplevel):
 
         # Centre on screen
         self.update_idletasks()
-        w, h = 360, 480
+        w, h = 360, 460
         x = (self.winfo_screenwidth() - w) // 2
         y = (self.winfo_screenheight() - h) // 2
         self.geometry(f"{w}x{h}+{x}+{y}")
@@ -67,19 +67,19 @@ class LoginScreen(tk.Toplevel):
             self._build_login(outer)
 
     def _build_login(self, outer):
-        tk.Label(outer, text="Nhập mật khẩu 6 chữ số", bg=BG, fg=TEXT_LIGHT,
+        tk.Label(outer, text="Nhập mật khẩu", bg=BG, fg=TEXT_LIGHT,
                  font=FONT_BOLD).pack()
 
-        self._pin_var = tk.StringVar()
-        self._pin_entry = tk.Entry(
-            outer, textvariable=self._pin_var, show="●",
-            font=("Segoe UI", 22, "bold"), width=10,
+        self._pw_var = tk.StringVar()
+        self._pw_entry = tk.Entry(
+            outer, textvariable=self._pw_var, show="●",
+            font=("Segoe UI", 14), width=20,
             justify="center", bd=0, relief="flat",
             bg=CARD_BG, fg=TEXT_LIGHT, insertbackground=TEXT_LIGHT,
         )
-        self._pin_entry.pack(pady=16, ipady=10)
-        self._pin_entry.bind("<Return>", lambda _: self._do_login())
-        self._pin_entry.focus_set()
+        self._pw_entry.pack(pady=16, ipady=10)
+        self._pw_entry.bind("<Return>", lambda _: self._do_login())
+        self._pw_entry.focus_set()
 
         self._error_lbl = tk.Label(outer, text="", bg=BG, fg=ERROR_COLOR, font=FONT_SMALL)
         self._error_lbl.pack()
@@ -91,31 +91,27 @@ class LoginScreen(tk.Toplevel):
         )
         btn.pack(pady=16, fill="x")
 
-        # PIN dots display
-        self._build_pin_dots(outer)
-        self._pin_var.trace_add("write", self._on_pin_change)
-
     def _build_setup(self, outer):
-        tk.Label(outer, text="Tạo mật khẩu 6 chữ số", bg=BG, fg=TEXT_LIGHT,
+        tk.Label(outer, text="Tạo mật khẩu mới", bg=BG, fg=TEXT_LIGHT,
                  font=FONT_BOLD).pack()
         tk.Label(outer, text="(Chỉ nhập lần đầu tiên)", bg=BG, fg=TEXT_DIM,
                  font=FONT_SMALL).pack(pady=(0, 8))
 
-        self._pin_var = tk.StringVar()
-        self._pin_entry = tk.Entry(
-            outer, textvariable=self._pin_var, show="●",
-            font=("Segoe UI", 22, "bold"), width=10,
+        self._pw_var = tk.StringVar()
+        self._pw_entry = tk.Entry(
+            outer, textvariable=self._pw_var, show="●",
+            font=("Segoe UI", 14), width=20,
             justify="center", bd=0, relief="flat",
             bg=CARD_BG, fg=TEXT_LIGHT, insertbackground=TEXT_LIGHT,
         )
-        self._pin_entry.pack(pady=10, ipady=10)
-        self._pin_entry.focus_set()
+        self._pw_entry.pack(pady=10, ipady=10)
+        self._pw_entry.focus_set()
 
         tk.Label(outer, text="Xác nhận mật khẩu", bg=BG, fg=TEXT_LIGHT, font=FONT).pack()
         self._confirm_var = tk.StringVar()
         self._confirm_entry = tk.Entry(
             outer, textvariable=self._confirm_var, show="●",
-            font=("Segoe UI", 22, "bold"), width=10,
+            font=("Segoe UI", 14), width=20,
             justify="center", bd=0, relief="flat",
             bg=CARD_BG, fg=TEXT_LIGHT, insertbackground=TEXT_LIGHT,
         )
@@ -132,70 +128,37 @@ class LoginScreen(tk.Toplevel):
         )
         btn.pack(pady=12, fill="x")
 
-        # PIN dots display (for first entry)
-        self._build_pin_dots(outer)
-        self._pin_var.trace_add("write", self._on_pin_change)
-
-    def _build_pin_dots(self, parent):
-        """Row of 6 circles that fill as user types."""
-        dot_frame = tk.Frame(parent, bg=BG)
-        dot_frame.pack(pady=(4, 0))
-        self._dot_labels = []
-        for _ in range(6):
-            lbl = tk.Label(dot_frame, text="○", bg=BG, fg=TEXT_DIM,
-                           font=("Segoe UI", 18))
-            lbl.pack(side="left", padx=4)
-            self._dot_labels.append(lbl)
-
-    def _on_pin_change(self, *_):
-        pin = self._pin_var.get()
-        # Enforce max 6 digits
-        if len(pin) > 6:
-            self._pin_var.set(pin[:6])
-            return
-        for i, lbl in enumerate(self._dot_labels):
-            if i < len(pin):
-                lbl.config(text="●", fg=ACCENT)
-            else:
-                lbl.config(text="○", fg=TEXT_DIM)
-        # Auto-submit when 6 digits entered
-        if len(pin) == 6:
-            if self._setup_mode:
-                self._confirm_entry.focus_set()
-            else:
-                self.after(120, self._do_login)
-
     # ── Actions ────────────────────────────────────────────────────────────────
 
     def _do_login(self):
-        pin = self._pin_var.get().strip()
-        if len(pin) != 6 or not pin.isdigit():
-            self._error_lbl.config(text="Mật khẩu phải là 6 chữ số.")
-            self._pin_var.set("")
+        pw = self._pw_var.get()
+        if not pw:
+            self._error_lbl.config(text="Vui lòng nhập mật khẩu.")
             return
-        if db.check_password(pin):
+        if db.check_password(pw):
             self.success = True
             self.destroy()
         else:
             self._error_lbl.config(text="Mật khẩu không đúng. Thử lại.")
-            self._pin_var.set("")
-            self._pin_entry.focus_set()
+            self._pw_var.set("")
+            self._pw_entry.focus_set()
 
     def _do_setup(self):
-        pin = self._pin_var.get().strip()
-        confirm = self._confirm_var.get().strip()
-        if len(pin) != 6 or not pin.isdigit():
-            self._error_lbl.config(text="Mật khẩu phải là 6 chữ số.")
+        pw = self._pw_var.get()
+        confirm = self._confirm_var.get()
+        if not pw:
+            self._error_lbl.config(text="Mật khẩu không được để trống.")
             return
-        if pin != confirm:
+        if pw != confirm:
             self._error_lbl.config(text="Hai mật khẩu không khớp.")
             self._confirm_var.set("")
             self._confirm_entry.focus_set()
             return
-        db.set_password(pin)
+        db.set_password(pw)
         self.success = True
         self.destroy()
 
     def _on_close(self):
         """Closing without authenticating exits the application."""
         self.parent.destroy()
+

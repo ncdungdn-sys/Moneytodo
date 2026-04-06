@@ -602,17 +602,17 @@ def set_setting(key, value):
     conn.close()
 
 
-def hash_password(pin):
-    """Return SHA-256 hex digest of a 6-digit PIN string."""
-    return hashlib.sha256(pin.encode()).hexdigest()
+def hash_password(password):
+    """Return SHA-256 hex digest of a password string."""
+    return hashlib.sha256(password.encode()).hexdigest()
 
 
-def check_password(pin):
-    """Return True if pin matches the stored password hash."""
+def check_password(password):
+    """Return True if password matches the stored password hash."""
     stored = get_setting("password_hash")
     if stored is None:
         return False
-    return stored == hash_password(pin)
+    return stored == hash_password(password)
 
 
 def has_password():
@@ -620,9 +620,9 @@ def has_password():
     return get_setting("password_hash") is not None
 
 
-def set_password(pin):
+def set_password(password):
     """Store a new hashed password."""
-    set_setting("password_hash", hash_password(pin))
+    set_setting("password_hash", hash_password(password))
 
 
 # ─── Report queries ───────────────────────────────────────────────────────────

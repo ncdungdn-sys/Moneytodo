@@ -16,14 +16,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import database as db
 from ui.expenses_tab import ExpensesFrame
-from ui.categories_tab import CategoriesFrame
-from ui.planned_tab import PlannedExpensesFrame
+from ui.income_expense_management import IncomeExpenseManagementFrame
 from ui.reminders_tab import RemindersFrame
-from ui.reports_tab import ReportsFrame
 from ui.exercise_reminder_tab import ExerciseReminderFrame
 from ui.login_screen import LoginScreen
 from ui.passwords_tab import PasswordsFrame
-from ui.contacts_frame import ContactsFrame
 from utils.exercise_reminder import start_monitor
 
 # ── Colour palette ───────────────────────────────────────────────────────────
@@ -129,13 +126,10 @@ class MoneytodoApp(tk.Tk):
                  font=("Segoe UI", 9, "bold")).pack(pady=(16, 4), padx=16, anchor="w")
 
         nav_items = [
-            ("expenses",  "💸 Thu Chi Hàng Ngày"),
-            ("categories","🗂️ Quản Lý Danh Mục"),
-            ("planned",   "📋 Dự Chi Cố Định"),
-            ("reminders", "🔔 Ghi Chú & Nhắc Nhở"),
-            ("reports",   "📊 Báo Cáo"),
+            ("expenses",  "💰 Thu Chi Hàng Ngày"),
+            ("thu_chi",   "📊 Thu Chi"),
+            ("reminders", "🔔 Ghi Chú Việc Làm"),
             ("exercise",  "🏋️ Tập Thể Dục"),
-            ("contacts",  "📞 Danh Bạ"),
             ("passwords", "🔒 Quản Lý Mật Khẩu"),
         ]
         self._nav_buttons = {}
@@ -161,12 +155,9 @@ class MoneytodoApp(tk.Tk):
         # Build all tab frames (lazy-hidden)
         self._frames = {
             "expenses":   ExpensesFrame(self._content),
-            "categories": CategoriesFrame(self._content),
-            "planned":    PlannedExpensesFrame(self._content),
+            "thu_chi":    IncomeExpenseManagementFrame(self._content),
             "reminders":  RemindersFrame(self._content),
-            "reports":    ReportsFrame(self._content),
             "exercise":   ExerciseReminderFrame(self._content),
-            "contacts":   ContactsFrame(self._content),
             "passwords":  PasswordsFrame(self._content),
         }
         for frame in self._frames.values():
