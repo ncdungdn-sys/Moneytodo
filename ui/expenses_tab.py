@@ -1,6 +1,7 @@
 """
 Expenses tab - daily income/expense management.
-Features: add, edit, delete, filter by month or date range, daily summary, sort, export to Excel.
+Features: add, edit, delete, filter by month or date range, daily summary, sort, export to Excel,
+          pagination (50 rows per page by default).
 """
 import calendar
 import tkinter as tk
@@ -24,6 +25,8 @@ FONT_BOLD = ("Segoe UI", 10, "bold")
 FONT_HEADER = ("Segoe UI", 12, "bold")
 FONT_SMALL = ("Segoe UI", 9)
 
+_PER_PAGE_OPTIONS = [25, 50, 100]
+
 
 def _fmt_money(val):
     try:
@@ -32,12 +35,116 @@ def _fmt_money(val):
         return str(val)
 
 
+# ---------------------------------------------------------------------------
+# Reusable pagination bar widget
+# ---------------------------------------------------------------------------
+
+class _PaginationBar(tk.Frame):
+    """A compact navigation bar: «Prev  Page N of M  Next  | per-page ▾».
+
+    Usage::
+
+        bar = _PaginationBar(parent, on_page_change=callback)
+        bar.update(page=1, pages=5, total=230, per_page=50)
+
+    ``on_page_change(page, per_page)`` is called whenever the user
+    navigates to a different page or changes the items-per-page selector.
+    """
+
+    def __init__(self, parent, on_page_change, **kwargs):
+        super().__init__(parent, bg=BG, **kwargs)
+        self._callback = on_page_change
+        self._page = 1
+        self._pages = 1
+        self._total = 0
+        self._per_page = 50
+        self._build()
+
+    def _build(self):
+        self._btn_prev = ttk.Button(self, text="◀ Tr\u01b0\u1edbc", width=9,
+                                    command=self._go_prev)
+        self._btn_prev.pack(side="left", padx=(0, 4))
+
+        self._lbl_info = tk.Label(self, text="Trang 1 / 1", bg=BG, font=FONT)
+        self._lbl_info.pack(side="left", padx=4)
+
+        self._btn_next = ttk.Button(self, text="Ti\u1ebfp ▶", width=9,
+                                    command=self._go_next)
+        self._btn_next.pack(side="left", padx=(4, 12))
+
+        # Jump-to-page entry
+        tk.Label(self, text="Đến trang:", bg=BG, font=FONT_SMALL).pack(side="left")
+        self._page_var = tk.StringVar()
+        self._page_entry = ttk.Entry(self, textvariable=self._page_var, width=4)
+        self._page_entry.pack(side="left", padx=(2, 8))
+        self._page_entry.bind("<Return>", self._on_jump)
+
+        # Items-per-page dropdown
+        tk.Label(self, text="Số dòng:", bg=BG, font=FONT_SMALL).pack(side="left")
+        self._per_page_var = tk.StringVar(value="50")
+        self._per_page_cb = ttk.Combobox(
+            self, textvariable=self._per_page_var,
+            values=[str(v) for v in _PER_PAGE_OPTIONS],
+            state="readonly", width=5,
+        )
+        self._per_page_cb.pack(side="left", padx=(2, 8))
+        self._per_page_cb.bind("<<ComboboxSelected>>", self._on_per_page_change)
+
+        # Count label (right-aligned)
+        self._lbl_count = tk.Label(self, text="", bg=BG, font=FONT_SMALL, fg="#7F8C8D")
+        self._lbl_count.pack(side="left", padx=4)
+
+    def update(self, page, pages, total, per_page):
+        self._page = page
+        self._pages = pages
+        self._total = total
+        self._per_page = per_page
+
+        self._lbl_info.config(text=f"Trang {page} / {pages}")
+        self._per_page_var.set(str(per_page))
+
+        start = (page - 1) * per_page + 1 if total else 0
+        end = min(page * per_page, total)
+        self._lbl_count.config(text=f"Hiển thị {start}–{end} / {total} mục")
+
+        self._btn_prev.config(state="normal" if page > 1 else "disabled")
+        self._btn_next.config(state="normal" if page < pages else "disabled")
+        self._page_var.set("")
+
+    def _go_prev(self):
+        if self._page > 1:
+            self._callback(self._page - 1, self._per_page)
+
+    def _go_next(self):
+        if self._page < self._pages:
+            self._callback(self._page + 1, self._per_page)
+
+    def _on_jump(self, _event=None):
+        try:
+            p = int(self._page_var.get())
+            if 1 <= p <= self._pages:
+                self._callback(p, self._per_page)
+        except ValueError:
+            pass
+
+    def _on_per_page_change(self, _event=None):
+        try:
+            pp = int(self._per_page_var.get())
+        except ValueError:
+            pp = 50
+        self._callback(1, pp)
+
+
 class ExpensesFrame(tk.Frame):
     def __init__(self, parent):
         super().__init__(parent, bg=BG)
         self._expenses = []
         self._sort_col = "date"
         self._sort_reverse = True
+        # Pagination state
+        self._current_page = 1
+        self._per_page = 50
+        self._total_count = 0
         self._build_ui()
         self.load_data()
 
@@ -167,9 +274,17 @@ class ExpensesFrame(tk.Frame):
 
         # Action buttons
         btn_row = tk.Frame(self, bg=BG)
-        btn_row.pack(fill="x", padx=10, pady=(0, 8))
+        btn_row.pack(fill="x", padx=10, pady=(0, 4))
         ttk.Button(btn_row, text="\u270f\ufe0f S\u1eeda", command=self.open_edit_dialog).pack(side="left", padx=2)
         ttk.Button(btn_row, text="\U0001f5d1\ufe0f X\xf3a", command=self.delete_selected).pack(side="left", padx=2)
+
+        # -- Pagination bar ----------------------------------------------------
+        self._pagination = _PaginationBar(self, on_page_change=self._on_page_change)
+        self._pagination.pack(fill="x", padx=10, pady=(0, 8))
+
+        # Keyboard shortcuts: Ctrl+Left / Ctrl+Right to navigate pages
+        self.bind_all("<Control-Left>",  lambda e: self._pagination._go_prev())
+        self.bind_all("<Control-Right>", lambda e: self._pagination._go_next())
 
     # -- Mode switching -------------------------------------------------------
 
@@ -181,7 +296,15 @@ class ExpensesFrame(tk.Frame):
         else:
             self.month_ctrl.pack_forget()
             self.range_ctrl.pack(fill="x")
+        self._current_page = 1
         self.load_data()
+
+    # -- Pagination callback ---------------------------------------------------
+
+    def _on_page_change(self, page, per_page):
+        self._current_page = page
+        self._per_page = per_page
+        self.load_data(keep_page=True)
 
     # -- Daily summary canvas helpers -----------------------------------------
 
@@ -201,11 +324,41 @@ class ExpensesFrame(tk.Frame):
 
     # -- Data loading ---------------------------------------------------------
 
-    def load_data(self):
+    def load_data(self, keep_page=False):
+        """Load (or reload) the current page of expenses.
+
+        Parameters
+        ----------
+        keep_page : bool
+            When *True* the current page number is preserved (used when
+            navigating pages). When *False* (default – e.g. after a filter
+            change) we always jump back to page 1.
+        """
+        if not keep_page:
+            self._current_page = 1
+
+        # Map the UI sort column name to a DB column name
+        sort_col_map = {
+            "date":        "expense_date",
+            "type":        "type",
+            "category":    "category_name",
+            "subcategory": "subcategory_name",
+            "amount":      "amount",
+            "description": "description",
+        }
+        order_by = sort_col_map.get(self._sort_col, "expense_date")
+        order_dir = "DESC" if self._sort_reverse else "ASC"
+
         mode = self.filter_mode.get()
         if mode == "month":
-            month = self.month_var.get().strip()
-            self._expenses = db.get_expenses(month=month if month else None)
+            month = self.month_var.get().strip() or None
+            result = db.get_expenses_paginated(
+                page=self._current_page,
+                per_page=self._per_page,
+                month=month,
+                order_by=order_by,
+                order_dir=order_dir,
+            )
             s = db.get_monthly_summary(month) if month else {"income": 0.0, "expense": 0.0}
             summaries = []
             if month:
@@ -220,17 +373,35 @@ class ExpensesFrame(tk.Frame):
         else:
             from_date = self.from_var.get().strip()
             to_date = self.to_var.get().strip()
-            self._expenses = db.get_expenses_range(from_date, to_date) if (from_date and to_date) else []
-            # Keep consistent DESC sort for the treeview
-            self._expenses.sort(
-                key=lambda r: (r.get("expense_date", ""), r.get("id", 0)), reverse=True
-            )
-            s = db.get_summary_range(from_date, to_date) if (from_date and to_date) else {"income": 0.0, "expense": 0.0}
-            summaries = db.get_daily_summaries_range(from_date, to_date) if (from_date and to_date) else []
+            if from_date and to_date:
+                result = db.get_expenses_range_paginated(
+                    from_date, to_date,
+                    page=self._current_page,
+                    per_page=self._per_page,
+                    order_by=order_by,
+                    order_dir=order_dir,
+                )
+                s = db.get_summary_range(from_date, to_date)
+                summaries = db.get_daily_summaries_range(from_date, to_date)
+            else:
+                result = {"data": [], "page": 1, "per_page": self._per_page,
+                          "total": 0, "pages": 1}
+                s = {"income": 0.0, "expense": 0.0}
+                summaries = []
+
+        self._expenses = result["data"]
+        self._total_count = result["total"]
+        self._current_page = result["page"]
 
         self._refresh_summary(s)
         self._refresh_tree()
         self._refresh_daily_summaries(summaries)
+        self._pagination.update(
+            page=result["page"],
+            pages=result["pages"],
+            total=result["total"],
+            per_page=result["per_page"],
+        )
 
     def _refresh_tree(self):
         for row in self.tree.get_children():
@@ -349,22 +520,11 @@ class ExpensesFrame(tk.Frame):
             self._sort_reverse = not self._sort_reverse
         else:
             self._sort_col = col
-            self._sort_reverse = False
+            self._sort_reverse = True if col == "date" else False
 
-        col_map = {
-            "date": "expense_date",
-            "type": "type",
-            "category": "category_name",
-            "subcategory": "subcategory_name",
-            "amount": "amount",
-            "description": "description",
-        }
-        key = col_map.get(col, col)
-        self._expenses.sort(
-            key=lambda r: (r.get(key) or "").lower() if isinstance(r.get(key), str) else (r.get(key) or 0),
-            reverse=self._sort_reverse,
-        )
-        self._refresh_tree()
+        # Reset to page 1 and re-fetch with new sort order from DB
+        self._current_page = 1
+        self.load_data(keep_page=True)
 
     # -- CRUD dialogs ---------------------------------------------------------
 

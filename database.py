@@ -389,6 +389,152 @@ def delete_category(cat_id):
 
 # ─── Expense CRUD ─────────────────────────────────────────────────────────────
 
+# Allowed sort column map (user-facing name → SQL expression)
+_EXPENSE_SORT_COLS = {
+    "expense_date":     "e.expense_date",
+    "type":             "e.type",
+    "category_name":    "cat.name",
+    "subcategory_name": "sub.name",
+    "amount":           "e.amount",
+    "description":      "e.description",
+}
+
+
+def _build_expense_where(month=None, type_filter=None):
+    """Return (where_clause, params) for expense queries."""
+    where = "WHERE 1=1"
+    params = []
+    if month:
+        where += " AND strftime('%Y-%m', e.expense_date) = ?"
+        params.append(month)
+    if type_filter:
+        where += " AND e.type = ?"
+        params.append(type_filter)
+    return where, params
+
+
+def _build_expense_range_where(from_date, to_date, type_filter=None):
+    """Return (where_clause, params) for date-range expense queries."""
+    where = "WHERE e.expense_date >= ? AND e.expense_date <= ?"
+    params = [from_date, to_date]
+    if type_filter:
+        where += " AND e.type = ?"
+        params.append(type_filter)
+    return where, params
+
+
+def _expense_order_clause(order_by="expense_date", order_dir="DESC"):
+    """Return a safe ORDER BY clause for expense queries."""
+    col = _EXPENSE_SORT_COLS.get(order_by, "e.expense_date")
+    direction = "DESC" if order_dir.upper() == "DESC" else "ASC"
+    # Secondary sort by id for stable ordering
+    return f"ORDER BY {col} {direction}, e.id {direction}"
+
+
+_EXPENSE_SELECT = """
+    SELECT e.id, e.type, e.amount, e.description, e.expense_date,
+           cat.name AS category_name,
+           sub.name AS subcategory_name,
+           e.category_id, e.subcategory_id
+    FROM expenses e
+    LEFT JOIN categories cat ON e.category_id = cat.id
+    LEFT JOIN categories sub ON e.subcategory_id = sub.id
+"""
+
+
+def get_expenses_paginated(page=1, per_page=50, month=None, type_filter=None,
+                            order_by="expense_date", order_dir="DESC"):
+    """Fetch a single page of expenses filtered by month.
+
+    Returns a dict::
+
+        {
+            "data":     [row, ...],
+            "page":     <current page>,
+            "per_page": <items per page>,
+            "total":    <total matching rows>,
+            "pages":    <total number of pages>,
+        }
+    """
+    where, params = _build_expense_where(month=month, type_filter=type_filter)
+    order = _expense_order_clause(order_by, order_dir)
+    offset = (page - 1) * per_page
+
+    conn = get_connection()
+    c = conn.cursor()
+
+    c.execute(f"SELECT COUNT(*) FROM expenses e {where}", params)
+    total = c.fetchone()[0]
+
+    c.execute(
+        f"{_EXPENSE_SELECT} {where} {order} LIMIT ? OFFSET ?",
+        params + [per_page, offset],
+    )
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+
+    pages = max(1, (total + per_page - 1) // per_page)
+    return {"data": rows, "page": page, "per_page": per_page, "total": total, "pages": pages}
+
+
+def get_expenses_range_paginated(from_date, to_date, page=1, per_page=50,
+                                  type_filter=None, order_by="expense_date",
+                                  order_dir="DESC"):
+    """Fetch a single page of expenses within a date range.
+
+    Returns the same structure as :func:`get_expenses_paginated`.
+    """
+    where, params = _build_expense_range_where(from_date, to_date, type_filter=type_filter)
+    order = _expense_order_clause(order_by, order_dir)
+    offset = (page - 1) * per_page
+
+    conn = get_connection()
+    c = conn.cursor()
+
+    c.execute(f"SELECT COUNT(*) FROM expenses e {where}", params)
+    total = c.fetchone()[0]
+
+    c.execute(
+        f"{_EXPENSE_SELECT} {where} {order} LIMIT ? OFFSET ?",
+        params + [per_page, offset],
+    )
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+
+    pages = max(1, (total + per_page - 1) // per_page)
+    return {"data": rows, "page": page, "per_page": per_page, "total": total, "pages": pages}
+
+
+def get_planned_expenses_paginated(page=1, per_page=50, month=None):
+    """Fetch a single page of planned expenses.
+
+    Returns the same structure as :func:`get_expenses_paginated`.
+    """
+    where = "WHERE 1=1"
+    params = []
+    if month:
+        where += " AND month = ?"
+        params.append(month)
+    order = "ORDER BY name COLLATE NOCASE ASC"
+    offset = (page - 1) * per_page
+
+    conn = get_connection()
+    c = conn.cursor()
+
+    c.execute(f"SELECT COUNT(*) FROM planned_expenses {where}", params)
+    total = c.fetchone()[0]
+
+    c.execute(
+        f"SELECT * FROM planned_expenses {where} {order} LIMIT ? OFFSET ?",
+        params + [per_page, offset],
+    )
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+
+    pages = max(1, (total + per_page - 1) // per_page)
+    return {"data": rows, "page": page, "per_page": per_page, "total": total, "pages": pages}
+
+
 def get_expenses(month=None, type_filter=None):
     """
     Fetch expenses, optionally filtered by month (YYYY-MM) and/or type.
