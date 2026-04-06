@@ -108,6 +108,7 @@ def init_db():
     _seed_default_categories(conn)
     _create_exercise_tables(conn)
     _create_password_tables(conn)
+    _create_contact_tables(conn)
     conn.close()
 
 
@@ -1156,3 +1157,133 @@ def get_password_by_id(password_id):
     if row is None:
         return None
     return (row["id"], row["category"], row["account_name"], row["password"], row["notes"])
+
+
+# ─── Contacts ─────────────────────────────────────────────────────────────────
+
+def _create_contact_tables(conn):
+    """Create contacts table."""
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS contacts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            age INTEGER,
+            phone TEXT,
+            email TEXT,
+            address TEXT,
+            notes TEXT,
+            created_at TEXT DEFAULT (datetime('now','localtime')),
+            updated_at TEXT DEFAULT (datetime('now','localtime'))
+        )
+    """)
+    conn.commit()
+
+    # Migration: add address column if missing (for existing databases)
+    c.execute("PRAGMA table_info(contacts)")
+    cols = [row[1] for row in c.fetchall()]
+    if cols and "address" not in cols:
+        c.execute("ALTER TABLE contacts ADD COLUMN address TEXT")
+        conn.commit()
+
+
+def add_contact(name, age=None, phone="", email="", address="", notes=""):
+    """Add a new contact. name is required. Returns the new contact id."""
+    name = name.strip()
+    if not name:
+        raise ValueError("Tên liên hệ không được để trống.")
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        """INSERT INTO contacts (name, age, phone, email, address, notes)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (name, age if age else None, phone or "", email or "", address or "", notes or ""),
+    )
+    conn.commit()
+    new_id = c.lastrowid
+    conn.close()
+    return new_id
+
+
+def update_contact(contact_id, name, age=None, phone="", email="", address="", notes=""):
+    """Update an existing contact. name is required."""
+    name = name.strip()
+    if not name:
+        raise ValueError("Tên liên hệ không được để trống.")
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        """UPDATE contacts
+           SET name=?, age=?, phone=?, email=?, address=?, notes=?,
+               updated_at=datetime('now','localtime')
+           WHERE id=?""",
+        (name, age if age else None, phone or "", email or "", address or "", notes or "", contact_id),
+    )
+    conn.commit()
+    conn.close()
+    return True
+
+
+def delete_contact(contact_id):
+    """Delete a contact by id."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("DELETE FROM contacts WHERE id=?", (contact_id,))
+    conn.commit()
+    conn.close()
+
+
+def get_all_contacts():
+    """Return all contacts sorted by name.
+
+    Returns a list of tuples: (id, name, age, phone, email, address, notes, created_at, updated_at).
+    """
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "SELECT id, name, age, phone, email, address, notes, created_at, updated_at FROM contacts ORDER BY name COLLATE NOCASE"
+    )
+    rows = [
+        (r["id"], r["name"], r["age"], r["phone"], r["email"], r["address"], r["notes"], r["created_at"], r["updated_at"])
+        for r in c.fetchall()
+    ]
+    conn.close()
+    return rows
+
+
+def search_contacts(query):
+    """Search contacts by name, phone, email, address, or notes (case-insensitive).
+
+    Returns a list of tuples: (id, name, age, phone, email, address, notes, created_at, updated_at).
+    """
+    conn = get_connection()
+    c = conn.cursor()
+    pattern = f"%{query}%"
+    c.execute(
+        """SELECT id, name, age, phone, email, address, notes, created_at, updated_at
+           FROM contacts
+           WHERE name LIKE ? OR phone LIKE ? OR email LIKE ? OR address LIKE ? OR notes LIKE ?
+           ORDER BY name COLLATE NOCASE""",
+        (pattern, pattern, pattern, pattern, pattern),
+    )
+    rows = [
+        (r["id"], r["name"], r["age"], r["phone"], r["email"], r["address"], r["notes"], r["created_at"], r["updated_at"])
+        for r in c.fetchall()
+    ]
+    conn.close()
+    return rows
+
+
+def get_contact_by_id(contact_id):
+    """Return a single contact as a tuple (id, name, age, phone, email, address, notes, created_at, updated_at)."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "SELECT id, name, age, phone, email, address, notes, created_at, updated_at FROM contacts WHERE id=?",
+        (contact_id,),
+    )
+    row = c.fetchone()
+    conn.close()
+    if row is None:
+        return None
+    return (row["id"], row["name"], row["age"], row["phone"], row["email"], row["address"], row["notes"], row["created_at"], row["updated_at"])

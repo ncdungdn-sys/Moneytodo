@@ -23,6 +23,7 @@ from ui.reports_tab import ReportsFrame
 from ui.exercise_reminder_tab import ExerciseReminderFrame
 from ui.login_screen import LoginScreen
 from ui.passwords_tab import PasswordsFrame
+from ui.contacts_frame import ContactsFrame
 from utils.exercise_reminder import start_monitor
 
 # ── Colour palette ───────────────────────────────────────────────────────────
@@ -134,6 +135,7 @@ class MoneytodoApp(tk.Tk):
             ("reminders", "🔔 Ghi Chú & Nhắc Nhở"),
             ("reports",   "📊 Báo Cáo"),
             ("exercise",  "🏋️ Tập Thể Dục"),
+            ("contacts",  "📞 Danh Bạ"),
             ("passwords", "🔒 Quản Lý Mật Khẩu"),
         ]
         self._nav_buttons = {}
@@ -164,6 +166,7 @@ class MoneytodoApp(tk.Tk):
             "reminders":  RemindersFrame(self._content),
             "reports":    ReportsFrame(self._content),
             "exercise":   ExerciseReminderFrame(self._content),
+            "contacts":   ContactsFrame(self._content),
             "passwords":  PasswordsFrame(self._content),
         }
         for frame in self._frames.values():
