@@ -1118,7 +1118,7 @@ def add_password(category, detail, account_name, password, notes=""):
         c = conn.cursor()
         c.execute(
             "INSERT INTO passwords (category, detail, account_name, password, notes) VALUES (?, ?, ?, ?, ?)",
-            (category, detail or "", account_name, password or "", notes),
+            (category, detail or None, account_name, password or None, notes or None),
         )
         conn.commit()
         new_id = c.lastrowid
@@ -1141,7 +1141,7 @@ def update_password(password_id, category, detail, account_name, password, notes
            SET category=?, detail=?, account_name=?, password=?, notes=?,
                updated_at=datetime('now','localtime')
            WHERE id=?""",
-        (category, detail or "", account_name, password or "", notes, password_id),
+        (category, detail or None, account_name, password or None, notes or None, password_id),
     )
     conn.commit()
     conn.close()
