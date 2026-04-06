@@ -105,7 +105,69 @@ def init_db():
     conn.commit()
     _migrate_db(conn)
     _seed_default_categories(conn)
+    _create_exercise_tables(conn)
     conn.close()
+
+
+def _create_exercise_tables(conn):
+    """Create exercise reminder system tables."""
+    c = conn.cursor()
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS exercise_reminders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            exercise_name TEXT NOT NULL,
+            description TEXT,
+            interval_minutes INTEGER DEFAULT 30,
+            is_enabled INTEGER DEFAULT 1,
+            created_at TEXT DEFAULT (datetime('now','localtime'))
+        )
+    """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS exercise_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_date TEXT NOT NULL,
+            start_time TEXT,
+            end_time TEXT,
+            mode TEXT NOT NULL,
+            interval_minutes INTEGER DEFAULT 30,
+            is_active INTEGER DEFAULT 0,
+            auto_stop_hours INTEGER,
+            created_at TEXT DEFAULT (datetime('now','localtime'))
+        )
+    """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS exercise_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id INTEGER REFERENCES exercise_sessions(id) ON DELETE CASCADE,
+            exercise_name TEXT NOT NULL,
+            exercise_time TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now','localtime'))
+        )
+    """)
+
+    conn.commit()
+
+    # Seed default exercises if table is empty
+    c.execute("SELECT COUNT(*) FROM exercise_reminders")
+    if c.fetchone()[0] == 0:
+        defaults = [
+            ("Hít đất", "Chống đẩy tay", 30),
+            ("Hít xà", "Kéo xà đơn", 30),
+            ("Tập tạ", "Nâng tạ tay", 30),
+            ("Stretching", "Giãn cơ toàn thân", 30),
+            ("Jogging", "Chạy bộ tại chỗ", 30),
+            ("Đứng dậy vận động", "Đứng dậy đi lại", 30),
+        ]
+        for name, desc, interval in defaults:
+            c.execute(
+                "INSERT INTO exercise_reminders (exercise_name, description, interval_minutes) VALUES (?, ?, ?)",
+                (name, desc, interval),
+            )
+        conn.commit()
 
 
 def _migrate_db(conn):
@@ -672,3 +734,146 @@ def get_daily_summaries_range(from_date, to_date):
     dates = [row["expense_date"] for row in c.fetchall()]
     conn.close()
     return [get_daily_summary(d) for d in dates]
+
+
+# ─── Exercise Reminder CRUD ───────────────────────────────────────────────────
+
+def get_exercise_reminders():
+    """Get all exercise reminders."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT * FROM exercise_reminders ORDER BY id ASC")
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return rows
+
+
+def add_exercise_reminder(name, description, interval_minutes=30):
+    """Add new exercise reminder."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "INSERT INTO exercise_reminders (exercise_name, description, interval_minutes) VALUES (?, ?, ?)",
+        (name, description, interval_minutes),
+    )
+    new_id = c.lastrowid
+    conn.commit()
+    conn.close()
+    return new_id
+
+
+def update_exercise_reminder(rem_id, name, description, interval_minutes):
+    """Update exercise reminder."""
+    conn = get_connection()
+    conn.execute(
+        "UPDATE exercise_reminders SET exercise_name=?, description=?, interval_minutes=? WHERE id=?",
+        (name, description, interval_minutes, rem_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def toggle_exercise_reminder_enabled(rem_id):
+    """Toggle is_enabled for an exercise reminder."""
+    conn = get_connection()
+    conn.execute(
+        "UPDATE exercise_reminders SET is_enabled = CASE WHEN is_enabled=1 THEN 0 ELSE 1 END WHERE id=?",
+        (rem_id,),
+    )
+    conn.commit()
+    conn.close()
+
+
+def delete_exercise_reminder(rem_id):
+    """Delete exercise reminder."""
+    conn = get_connection()
+    conn.execute("DELETE FROM exercise_reminders WHERE id=?", (rem_id,))
+    conn.commit()
+    conn.close()
+
+
+def start_exercise_session(mode="on_demand", interval_minutes=30, auto_stop_hours=None):
+    """Start new exercise session. Returns session_id."""
+    conn = get_connection()
+    c = conn.cursor()
+    today = datetime.now().strftime("%Y-%m-%d")
+    start_time = datetime.now().strftime("%H:%M:%S")
+    c.execute(
+        """INSERT INTO exercise_sessions
+           (session_date, start_time, mode, interval_minutes, is_active, auto_stop_hours)
+           VALUES (?, ?, ?, ?, 1, ?)""",
+        (today, start_time, mode, interval_minutes, auto_stop_hours),
+    )
+    session_id = c.lastrowid
+    conn.commit()
+    conn.close()
+    return session_id
+
+
+def stop_exercise_session(session_id):
+    """Stop exercise session."""
+    conn = get_connection()
+    end_time = datetime.now().strftime("%H:%M:%S")
+    conn.execute(
+        "UPDATE exercise_sessions SET is_active=0, end_time=? WHERE id=?",
+        (end_time, session_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_active_session(today_date):
+    """Get active session for today."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "SELECT * FROM exercise_sessions WHERE session_date=? AND is_active=1 ORDER BY id DESC LIMIT 1",
+        (today_date,),
+    )
+    row = c.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def add_exercise_history(session_id, exercise_name, exercise_time, status):
+    """Log exercise activity. status: 'completed'|'skipped'|'pending'."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "INSERT INTO exercise_history (session_id, exercise_name, exercise_time, status) VALUES (?, ?, ?, ?)",
+        (session_id, exercise_name, exercise_time, status),
+    )
+    new_id = c.lastrowid
+    conn.commit()
+    conn.close()
+    return new_id
+
+
+def get_exercise_history_today(session_id):
+    """Get today's exercise history for a session."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "SELECT * FROM exercise_history WHERE session_id=? ORDER BY id ASC",
+        (session_id,),
+    )
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return rows
+
+
+def get_exercise_stats_today(session_id):
+    """Get stats: total_reminders, completed, skipped."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        """SELECT status, COUNT(*) as cnt FROM exercise_history
+           WHERE session_id=? GROUP BY status""",
+        (session_id,),
+    )
+    stats = {"total": 0, "completed": 0, "skipped": 0, "pending": 0}
+    for row in c.fetchall():
+        stats[row["status"]] = row["cnt"]
+    stats["total"] = stats["completed"] + stats["skipped"] + stats["pending"]
+    conn.close()
+    return stats

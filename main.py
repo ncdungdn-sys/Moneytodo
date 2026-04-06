@@ -20,7 +20,9 @@ from ui.categories_tab import CategoriesFrame
 from ui.planned_tab import PlannedExpensesFrame
 from ui.reminders_tab import RemindersFrame
 from ui.reports_tab import ReportsFrame
+from ui.exercise_reminder_tab import ExerciseReminderFrame
 from ui.login_screen import LoginScreen
+from utils.exercise_reminder import start_monitor
 
 # ── Colour palette ───────────────────────────────────────────────────────────
 BG = "#F0F4F8"
@@ -60,6 +62,9 @@ class MoneytodoApp(tk.Tk):
         if not login.success:
             self.destroy()
             return
+
+        # Start exercise reminder background monitor
+        start_monitor()
 
         # Build layout
         self._build_header()
@@ -127,6 +132,7 @@ class MoneytodoApp(tk.Tk):
             ("planned",   "📋 Dự Chi Cố Định"),
             ("reminders", "🔔 Ghi Chú & Nhắc Nhở"),
             ("reports",   "📊 Báo Cáo"),
+            ("exercise",  "🏋️ Tập Thể Dục"),
         ]
         self._nav_buttons = {}
         for tab_id, label in nav_items:
@@ -155,6 +161,7 @@ class MoneytodoApp(tk.Tk):
             "planned":    PlannedExpensesFrame(self._content),
             "reminders":  RemindersFrame(self._content),
             "reports":    ReportsFrame(self._content),
+            "exercise":   ExerciseReminderFrame(self._content),
         }
         for frame in self._frames.values():
             frame.place(relwidth=1, relheight=1)
