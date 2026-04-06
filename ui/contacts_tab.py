@@ -48,19 +48,18 @@ class ContactDialog(tk.Toplevel):
         tk.Label(frame, text=title, bg=CARD_BG, fg=TEXT_DARK, font=FONT_HEADER).pack(pady=(0, 16))
 
         # Pre-fill values when editing
-        # contact_data = (id, name, age, phone, email, address, notes, created_at, updated_at)
+        # contact_data tuple indices: 0=id, 1=name, 2=age(unused), 3=phone, 4=email, 5=address, 6=notes
         name_val = ""
         address_val = ""
         email_val = ""
         phone_val = ""
         notes_val = ""
         if self._data is not None:
-            _, name_val, _age, phone_val, email_val, address_val, notes_val, *_ = self._data
-            name_val = name_val or ""
-            address_val = address_val or ""
-            email_val = email_val or ""
-            phone_val = phone_val or ""
-            notes_val = notes_val or ""
+            name_val    = self._data[1] or ""
+            phone_val   = self._data[3] or ""
+            email_val   = self._data[4] or ""
+            address_val = self._data[5] or ""
+            notes_val   = self._data[6] or ""
 
         # Tên (required)
         tk.Label(frame, text="Tên *", bg=CARD_BG, fg=TEXT_DARK, font=FONT_BOLD).pack(anchor="w")
@@ -201,9 +200,14 @@ class ContactsFrame(ttk.Frame):
         self._tree.delete(*self._tree.get_children())
         self._item_id_map.clear()
 
-        # row = (id, name, age, phone, email, address, notes, created_at, updated_at)
+        # row tuple indices: 0=id, 1=name, 2=age(unused), 3=phone, 4=email, 5=address, 6=notes
         for row in rows:
-            contact_id, name, _age, phone, email, address, notes = row[:7]
+            contact_id = row[0]
+            name    = row[1] or ""
+            phone   = row[3] or ""
+            email   = row[4] or ""
+            address = row[5] or ""
+            notes   = row[6] or ""
             iid = self._tree.insert(
                 "", "end",
                 values=(name, address or "", email or "", phone or "", notes or ""),
