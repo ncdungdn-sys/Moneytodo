@@ -237,6 +237,16 @@ class ExpensesFrame(tk.Frame):
         self.daily_canvas.pack(side="left", fill="both", expand=True)
         daily_vsb.pack(side="right", fill="y")
 
+        # -- Pagination bar (packed bottom-up before tree so it stays visible) --
+        self._pagination = _PaginationBar(self, on_page_change=self._on_page_change)
+        self._pagination.pack(side="bottom", fill="x", padx=10, pady=(0, 8))
+
+        # Action buttons
+        btn_row = tk.Frame(self, bg=BG)
+        btn_row.pack(side="bottom", fill="x", padx=10, pady=(0, 4))
+        ttk.Button(btn_row, text="\u270f\ufe0f S\u1eeda", command=self.open_edit_dialog).pack(side="left", padx=2)
+        ttk.Button(btn_row, text="\U0001f5d1\ufe0f X\xf3a", command=self.delete_selected).pack(side="left", padx=2)
+
         # -- Treeview ----------------------------------------------------------
         tree_frame = tk.Frame(self, bg=BG)
         tree_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
@@ -271,16 +281,6 @@ class ExpensesFrame(tk.Frame):
 
         # Double-click to edit
         self.tree.bind("<Double-1>", lambda e: self.open_edit_dialog())
-
-        # Action buttons
-        btn_row = tk.Frame(self, bg=BG)
-        btn_row.pack(fill="x", padx=10, pady=(0, 4))
-        ttk.Button(btn_row, text="\u270f\ufe0f S\u1eeda", command=self.open_edit_dialog).pack(side="left", padx=2)
-        ttk.Button(btn_row, text="\U0001f5d1\ufe0f X\xf3a", command=self.delete_selected).pack(side="left", padx=2)
-
-        # -- Pagination bar ----------------------------------------------------
-        self._pagination = _PaginationBar(self, on_page_change=self._on_page_change)
-        self._pagination.pack(fill="x", padx=10, pady=(0, 8))
 
         # Keyboard shortcuts: Ctrl+Left / Ctrl+Right to navigate pages
         self.bind_all("<Control-Left>",  lambda e: self._pagination._go_prev())
