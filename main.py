@@ -22,6 +22,7 @@ from ui.exercise_reminder_tab import ExerciseReminderFrame
 from ui.login_screen import LoginScreen
 from ui.passwords_tab import PasswordsFrame
 from ui.shopping_list_tab import ShoppingListFrame
+from ui.contacts_tab import ContactsFrame
 from utils.exercise_reminder import start_monitor
 
 # ── Colour palette ───────────────────────────────────────────────────────────
@@ -133,6 +134,7 @@ class MoneytodoApp(tk.Tk):
             ("shopping",  "🛒 Mua Sắm"),
             ("exercise",  "🏋️ Tập Thể Dục"),
             ("passwords", "🔒 Quản Lý Mật Khẩu"),
+            ("contacts",  "📞 Danh Bạ"),
         ]
         self._nav_buttons = {}
         for tab_id, label in nav_items:
@@ -162,6 +164,7 @@ class MoneytodoApp(tk.Tk):
             "shopping":   ShoppingListFrame(self._content),
             "exercise":   ExerciseReminderFrame(self._content),
             "passwords":  PasswordsFrame(self._content),
+            "contacts":   ContactsFrame(self._content),
         }
         for frame in self._frames.values():
             frame.place(relwidth=1, relheight=1)
