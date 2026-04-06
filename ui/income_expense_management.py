@@ -408,7 +408,7 @@ class _ReportsSubTab(tk.Frame):
 
         cols = ("category", "income", "expense")
         self.detail_tree = ttk.Treeview(tbl_frame, columns=cols, show="headings",
-                                        height=6, selectmode="none")
+                                        height=6, selectmode="browse")
         for col, text, width in [("category", "Danh Mục", 200),
                                   ("income", "Thu", 130),
                                   ("expense", "Chi", 130)]:
@@ -418,6 +418,14 @@ class _ReportsSubTab(tk.Frame):
         self.detail_tree.configure(yscrollcommand=vsb2.set)
         self.detail_tree.pack(side="left", fill="x", expand=True)
         vsb2.pack(side="left", fill="y")
+
+        # Make rows clickable for drilldown
+        self.detail_tree.bind("<ButtonRelease-1>", self._on_category_click)
+        self.detail_tree.bind("<Motion>", self._on_tree_motion)
+        self.detail_tree.tag_configure("hover", background="#D6EAF8")
+        tk.Label(tbl_frame, text="💡 Nhấp vào dòng danh mục để xem chi tiết",
+                 bg=BG, fg="#7F8C8D", font=("Segoe UI", 8, "italic")).pack(
+            side="bottom", anchor="w", padx=4, pady=(0, 2))
 
     def load_data(self):
         from_date = self.from_var.get().strip()
@@ -553,10 +561,193 @@ class _ReportsSubTab(tk.Frame):
                 _fmt_money(exp) if exp else "—",
             ))
 
+    def _on_tree_motion(self, event):
+        """Highlight row under cursor and show pointer cursor."""
+        item = self.detail_tree.identify_row(event.y)
+        for row in self.detail_tree.get_children():
+            self.detail_tree.item(row, tags=())
+        if item:
+            self.detail_tree.item(item, tags=("hover",))
+            self.detail_tree.config(cursor="hand2")
+        else:
+            self.detail_tree.config(cursor="")
+
+    def _on_category_click(self, event):
+        """Open drilldown dialog when a category row is clicked."""
+        item = self.detail_tree.identify_row(event.y)
+        if not item:
+            return
+        values = self.detail_tree.item(item, "values")
+        if not values:
+            return
+        category_name = values[0]
+        from_date = self.from_var.get().strip()
+        to_date = self.to_var.get().strip()
+        if from_date and to_date:
+            _DrilldownDialog(self, category_name, from_date, to_date)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Planned dialog
+# Drilldown dialog – click a category row to see per-transaction detail
 # ─────────────────────────────────────────────────────────────────────────────
+
+class _DrilldownDialog(tk.Toplevel):
+    """Modal dialog showing all transactions for a given category in a date range."""
+
+    def __init__(self, parent, category_name, from_date, to_date):
+        super().__init__(parent)
+        self.title(f"Chi Tiết: {category_name}")
+        self.resizable(True, True)
+        self.grab_set()
+        self.configure(bg=BG)
+
+        self._category_name = category_name
+        self._from_date = from_date
+        self._to_date = to_date
+
+        self._build(category_name, from_date, to_date)
+
+        # Center on screen
+        self.update_idletasks()
+        w, h = 780, 520
+        sw = self.winfo_screenwidth()
+        sh = self.winfo_screenheight()
+        self.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
+
+    def _build(self, category_name, from_date, to_date):
+        # ── Header ────────────────────────────────────────────────────────
+        hdr = tk.Frame(self, bg=HEADER_BG, padx=12, pady=8)
+        hdr.pack(fill="x")
+        tk.Label(hdr, text=f"Chi Tiết: {category_name}",
+                 bg=HEADER_BG, fg=TEXT_LIGHT, font=FONT_HEADER).pack(side="left")
+        tk.Label(hdr, text=f"({from_date}  →  {to_date})",
+                 bg=HEADER_BG, fg="#BDC3C7", font=FONT).pack(side="left", padx=12)
+
+        # ── Transactions table ─────────────────────────────────────────────
+        tbl_frame = tk.Frame(self, bg=BG)
+        tbl_frame.pack(fill="both", expand=True, padx=12, pady=(10, 4))
+
+        cols = ("subcategory", "type", "amount", "date", "note")
+        self.tree = ttk.Treeview(tbl_frame, columns=cols, show="headings",
+                                 selectmode="none")
+        col_cfg = [
+            ("subcategory", "Danh Mục Con", 160, "w"),
+            ("type",        "Loại",          80, "center"),
+            ("amount",      "Số Tiền",       130, "e"),
+            ("date",        "Ngày",           90, "center"),
+            ("note",        "Ghi Chú",       240, "w"),
+        ]
+        for cid, text, width, anchor in col_cfg:
+            self.tree.heading(cid, text=text)
+            self.tree.column(cid, width=width, anchor=anchor, minwidth=50)
+
+        vsb = ttk.Scrollbar(tbl_frame, orient="vertical", command=self.tree.yview)
+        hsb = ttk.Scrollbar(tbl_frame, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        vsb.grid(row=0, column=1, sticky="ns")
+        hsb.grid(row=1, column=0, sticky="ew")
+        tbl_frame.rowconfigure(0, weight=1)
+        tbl_frame.columnconfigure(0, weight=1)
+
+        # Tag styles
+        self.tree.tag_configure("income_row", foreground=INCOME_COLOR)
+        self.tree.tag_configure("expense_row", foreground=EXPENSE_COLOR)
+        self.tree.tag_configure("subtotal_row", background="#EBF5FB", font=FONT_BOLD)
+        self.tree.tag_configure("total_row", background="#D5E8D4", font=FONT_BOLD)
+
+        # ── Subtotals panel ────────────────────────────────────────────────
+        sub_frame = tk.LabelFrame(self, text="Tổng Hợp Theo Danh Mục Con",
+                                  bg=BG, font=FONT_BOLD)
+        sub_frame.pack(fill="x", padx=12, pady=(0, 4))
+
+        self.subtotal_label = tk.Label(sub_frame, text="", bg=BG, font=FONT,
+                                       justify="left", anchor="w", wraplength=740)
+        self.subtotal_label.pack(fill="x", padx=8, pady=4)
+
+        # ── Close button ──────────────────────────────────────────────────
+        btn_frame = tk.Frame(self, bg=BG)
+        btn_frame.pack(fill="x", padx=12, pady=(0, 10))
+        ttk.Button(btn_frame, text="✖ Đóng", command=self.destroy).pack(side="right")
+
+        # Populate data
+        self._load_data(category_name, from_date, to_date)
+
+    def _load_data(self, category_name, from_date, to_date):
+        rows = db.get_category_transactions_range(from_date, to_date, category_name)
+
+        # Group by subcategory
+        sub_groups = defaultdict(list)
+        for r in rows:
+            sub = r["subcategory_name"] or "(Chung)"
+            sub_groups[sub].append(r)
+
+        subtotals = {}  # sub -> (income_total, expense_total)
+        grand_income = 0.0
+        grand_expense = 0.0
+
+        for sub in sorted(sub_groups.keys()):
+            inc_total = 0.0
+            exp_total = 0.0
+            for r in sub_groups[sub]:
+                tag = "income_row" if r["type"] == "income" else "expense_row"
+                amt = r["amount"] or 0.0
+                type_label = "Thu" if r["type"] == "income" else "Chi"
+                self.tree.insert("", "end", values=(
+                    sub,
+                    type_label,
+                    _fmt_money(amt),
+                    r["expense_date"],
+                    r["description"] or "",
+                ), tags=(tag,))
+                if r["type"] == "income":
+                    inc_total += amt
+                else:
+                    exp_total += amt
+
+            # Subtotal row for this subcategory
+            subtotal_parts = []
+            if inc_total:
+                subtotal_parts.append(f"Thu: {_fmt_money(inc_total)}")
+            if exp_total:
+                subtotal_parts.append(f"Chi: {_fmt_money(exp_total)}")
+            subtotal_str = "  |  ".join(subtotal_parts) if subtotal_parts else "—"
+            self.tree.insert("", "end", values=(
+                f"── Cộng {sub}",
+                "",
+                subtotal_str,
+                "",
+                "",
+            ), tags=("subtotal_row",))
+
+            subtotals[sub] = (inc_total, exp_total)
+            grand_income += inc_total
+            grand_expense += exp_total
+
+        # Grand total row
+        if rows:
+            self.tree.insert("", "end", values=(
+                "TỔNG CỘNG",
+                "",
+                f"Thu: {_fmt_money(grand_income)}  |  Chi: {_fmt_money(grand_expense)}",
+                "",
+                "",
+            ), tags=("total_row",))
+
+        # Subtotals summary text
+        lines = []
+        for sub in sorted(subtotals.keys()):
+            inc, exp = subtotals[sub]
+            if exp:
+                lines.append(f"└── {sub}: Chi {_fmt_money(exp)}")
+            if inc:
+                lines.append(f"└── {sub}: Thu {_fmt_money(inc)}")
+        if lines:
+            lines.append(f"TỔNG: Chi {_fmt_money(grand_expense)}  |  Thu {_fmt_money(grand_income)}")
+        self.subtotal_label.config(text="\n".join(lines) if lines else "Không có giao dịch.")
+
+
 
 class _PlannedDialog(tk.Toplevel):
     def __init__(self, parent_frame, title, item=None):

@@ -741,6 +741,33 @@ def get_category_totals_range(from_date, to_date, type_filter="expense"):
     return rows
 
 
+def get_category_transactions_range(from_date, to_date, category_name):
+    """Fetch all transactions for a specific category name within date range.
+
+    Returns list of dicts with keys:
+        id, type, amount, description, expense_date,
+        category_name, subcategory_name, account (always None for now)
+    Rows are ordered by subcategory then date.
+    """
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        """SELECT e.id, e.type, e.amount, e.description, e.expense_date,
+                  cat.name AS category_name,
+                  sub.name AS subcategory_name
+           FROM expenses e
+           LEFT JOIN categories cat ON e.category_id = cat.id
+           LEFT JOIN categories sub ON e.subcategory_id = sub.id
+           WHERE e.expense_date >= ? AND e.expense_date <= ?
+             AND cat.name = ?
+           ORDER BY sub.name ASC, e.expense_date ASC, e.id ASC""",
+        (from_date, to_date, category_name),
+    )
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return rows
+
+
 def get_daily_summary(expense_date):
     """Get income, expense, and category breakdown for a specific date.
 
