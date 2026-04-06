@@ -3,6 +3,7 @@ Contacts Tab – manage personal contacts (Danh Bạ).
 Fields: name (required), age, phone, email, address, notes.
 """
 import tkinter as tk
+import traceback
 from tkinter import ttk, messagebox
 
 import database as db
@@ -199,18 +200,22 @@ class ContactsFrame(tk.Frame):
         dlg = _ContactDialog(self.winfo_toplevel(), title="➕ Thêm Liên Hệ Mới")
         if dlg.result:
             name, age, phone, email, address, notes = dlg.result
+            print(f"[_show_add_dialog] 🔍 Parameters: name={name!r}, age={age!r}, phone={phone!r}, email={email!r}, address={address!r}, notes={notes!r}")
             try:
+                print("[_show_add_dialog] 🔍 Calling db.add_contact()...")
                 new_id = db.add_contact(name, age, phone, email, address, notes)
-                print(f"[ContactsFrame] ✅ Contact added: id={new_id}, name={name!r}")
+                print(f"[_show_add_dialog] ✅ SUCCESS: Contact added with id={new_id}")
                 self.load_data()
             except Exception as e:
-                print(f"[ContactsFrame] ❌ add_contact failed: {e}")
-                messagebox.showerror("Lỗi", f"Lưu liên hệ thất bại: {e}", parent=self)
+                print(f"[_show_add_dialog] ❌ EXCEPTION: {type(e).__name__}: {e}")
+                traceback.print_exc()
+                messagebox.showerror("Lỗi", f"Lưu liên hệ thất bại:\n{e}", parent=self)
 
     def _show_edit_dialog(self, contact_id):
         """Show dialog to edit an existing contact."""
         data = db.get_contact_by_id(contact_id)
         if data is None:
+            messagebox.showerror("Lỗi", "Không tìm thấy liên hệ", parent=self)
             return
         cid, name, age, phone, email, address, notes, *_ = data
         dlg = _ContactDialog(
@@ -220,23 +225,34 @@ class ContactsFrame(tk.Frame):
         )
         if dlg.result:
             name, age, phone, email, address, notes = dlg.result
+            print(f"[_show_edit_dialog] 🔍 Parameters: contact_id={contact_id}, name={name!r}, age={age!r}, phone={phone!r}, email={email!r}, address={address!r}, notes={notes!r}")
             try:
+                print("[_show_edit_dialog] 🔍 Calling db.update_contact()...")
                 db.update_contact(contact_id, name, age, phone, email, address, notes)
-                print(f"[ContactsFrame] ✅ Contact updated: id={contact_id}, name={name!r}")
+                print(f"[_show_edit_dialog] ✅ SUCCESS: Contact updated id={contact_id}")
                 self.load_data()
             except Exception as e:
-                print(f"[ContactsFrame] ❌ update_contact failed: {e}")
-                messagebox.showerror("Lỗi", f"Cập nhật liên hệ thất bại: {e}", parent=self)
+                print(f"[_show_edit_dialog] ❌ EXCEPTION: {type(e).__name__}: {e}")
+                traceback.print_exc()
+                messagebox.showerror("Lỗi", f"Cập nhật liên hệ thất bại:\n{e}", parent=self)
 
     def _delete_contact(self, contact_id):
         """Confirm and delete a contact."""
         data = db.get_contact_by_id(contact_id)
         if data is None:
+            messagebox.showerror("Lỗi", "Không tìm thấy liên hệ", parent=self)
             return
         name = data[1]
         if messagebox.askyesno("Xác nhận", f"Xóa liên hệ '{name}'?", parent=self):
-            db.delete_contact(contact_id)
-            self.load_data()
+            try:
+                print(f"[_delete_contact] 🔍 Deleting contact id={contact_id}")
+                db.delete_contact(contact_id)
+                print(f"[_delete_contact] ✅ SUCCESS: Contact deleted")
+                self.load_data()
+            except Exception as e:
+                print(f"[_delete_contact] ❌ EXCEPTION: {type(e).__name__}: {e}")
+                traceback.print_exc()
+                messagebox.showerror("Lỗi", f"Xóa liên hệ thất bại:\n{e}", parent=self)
 
 
 # ── Add / Edit Dialog ─────────────────────────────────────────────────────────
