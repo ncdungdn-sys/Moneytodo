@@ -11,7 +11,7 @@ TEXT_DARK = "#2C3E50"
 FONT = ("Segoe UI", 10)
 FONT_HEADER = ("Segoe UI", 12, "bold")
 
-CATEGORIES = ["Email", "Bank", "Social", "Game", "Work", "Other"]
+CATEGORIES = ["Email", "Bank", "Social Media", "Hệ Thống", "Khác"]
 
 
 def _center_dialog(dialog, parent):
@@ -177,6 +177,11 @@ class AddPasswordDialog(tk.Toplevel):
             frame, textvariable=self._cat_var, values=CATEGORIES, state="readonly", width=33,
         ).pack(pady=(4, 12), anchor="w")
 
+        tk.Label(frame, text="Chi Tiết:", bg=CARD_BG, fg=TEXT_DARK, font=FONT).pack(anchor="w")
+        self._detail_var = tk.StringVar()
+        ttk.Entry(frame, textvariable=self._detail_var, width=35).pack(pady=(4, 4))
+        tk.Label(frame, text="(vd: Gmail, Vietcombank, Facebook...)", bg=CARD_BG, fg="#95A5A6", font=("Segoe UI", 9)).pack(anchor="w", pady=(0, 8))
+
         tk.Label(frame, text="Tên Tài Khoản:", bg=CARD_BG, fg=TEXT_DARK, font=FONT).pack(anchor="w")
         self._acc_var = tk.StringVar()
         self._acc_entry = ttk.Entry(frame, textvariable=self._acc_var, width=35)
@@ -184,11 +189,12 @@ class AddPasswordDialog(tk.Toplevel):
 
         tk.Label(frame, text="Mật Khẩu:", bg=CARD_BG, fg=TEXT_DARK, font=FONT).pack(anchor="w")
         self._pw_var = tk.StringVar()
-        ttk.Entry(frame, textvariable=self._pw_var, width=35).pack(pady=(4, 12))
+        ttk.Entry(frame, textvariable=self._pw_var, width=35).pack(pady=(4, 4))
+        tk.Label(frame, text="(tuỳ chọn)", bg=CARD_BG, fg="#95A5A6", font=("Segoe UI", 9)).pack(anchor="w", pady=(0, 8))
 
         tk.Label(frame, text="Ghi Chú:", bg=CARD_BG, fg=TEXT_DARK, font=FONT).pack(anchor="w")
-        self._notes_var = tk.StringVar()
-        ttk.Entry(frame, textvariable=self._notes_var, width=35).pack(pady=(4, 4))
+        self._notes_text = tk.Text(frame, width=35, height=4, font=FONT, relief="solid", borderwidth=1)
+        self._notes_text.pack(pady=(4, 4))
         tk.Label(frame, text="(tuỳ chọn)", bg=CARD_BG, fg="#95A5A6", font=("Segoe UI", 9)).pack(anchor="w")
 
         btn_frame = tk.Frame(frame, bg=CARD_BG)
@@ -201,18 +207,16 @@ class AddPasswordDialog(tk.Toplevel):
 
     def _on_save(self):
         category = self._cat_var.get().strip()
+        detail = self._detail_var.get().strip()
         account_name = self._acc_var.get().strip()
         password = self._pw_var.get().strip()
-        notes = self._notes_var.get().strip()
+        notes = self._notes_text.get("1.0", "end-1c").strip()
 
         if not account_name:
             messagebox.showerror("Lỗi", "Vui lòng nhập tên tài khoản!", parent=self)
             return
-        if not password:
-            messagebox.showerror("Lỗi", "Vui lòng nhập mật khẩu!", parent=self)
-            return
 
-        self.result = (category, account_name, password, notes)
+        self.result = (category, detail, account_name, password, notes)
         self.destroy()
 
     def _on_cancel(self):
@@ -237,8 +241,8 @@ class EditPasswordDialog(tk.Toplevel):
     def _build_ui(self):
         self.configure(bg=CARD_BG)
 
-        # password_data = (id, category, account_name, password, notes)
-        _, category, account_name, password, notes = self._data
+        # password_data = (id, category, detail, account_name, password, notes)
+        _, category, detail, account_name, password, notes = self._data
 
         frame = tk.Frame(self, bg=CARD_BG, padx=30, pady=20)
         frame.pack(fill="both", expand=True)
@@ -254,17 +258,25 @@ class EditPasswordDialog(tk.Toplevel):
             frame, textvariable=self._cat_var, values=CATEGORIES, state="readonly", width=33,
         ).pack(pady=(4, 12), anchor="w")
 
+        tk.Label(frame, text="Chi Tiết:", bg=CARD_BG, fg=TEXT_DARK, font=FONT).pack(anchor="w")
+        self._detail_var = tk.StringVar(value=detail or "")
+        ttk.Entry(frame, textvariable=self._detail_var, width=35).pack(pady=(4, 4))
+        tk.Label(frame, text="(vd: Gmail, Vietcombank, Facebook...)", bg=CARD_BG, fg="#95A5A6", font=("Segoe UI", 9)).pack(anchor="w", pady=(0, 8))
+
         tk.Label(frame, text="Tên Tài Khoản:", bg=CARD_BG, fg=TEXT_DARK, font=FONT).pack(anchor="w")
         self._acc_var = tk.StringVar(value=account_name)
         ttk.Entry(frame, textvariable=self._acc_var, width=35).pack(pady=(4, 12))
 
         tk.Label(frame, text="Mật Khẩu:", bg=CARD_BG, fg=TEXT_DARK, font=FONT).pack(anchor="w")
-        self._pw_var = tk.StringVar(value=password)
-        ttk.Entry(frame, textvariable=self._pw_var, width=35).pack(pady=(4, 12))
+        self._pw_var = tk.StringVar(value=password or "")
+        ttk.Entry(frame, textvariable=self._pw_var, width=35).pack(pady=(4, 4))
+        tk.Label(frame, text="(tuỳ chọn)", bg=CARD_BG, fg="#95A5A6", font=("Segoe UI", 9)).pack(anchor="w", pady=(0, 8))
 
         tk.Label(frame, text="Ghi Chú:", bg=CARD_BG, fg=TEXT_DARK, font=FONT).pack(anchor="w")
-        self._notes_var = tk.StringVar(value=notes or "")
-        ttk.Entry(frame, textvariable=self._notes_var, width=35).pack(pady=(4, 4))
+        self._notes_text = tk.Text(frame, width=35, height=4, font=FONT, relief="solid", borderwidth=1)
+        self._notes_text.pack(pady=(4, 4))
+        if notes:
+            self._notes_text.insert("1.0", notes)
         tk.Label(frame, text="(tuỳ chọn)", bg=CARD_BG, fg="#95A5A6", font=("Segoe UI", 9)).pack(anchor="w")
 
         btn_frame = tk.Frame(frame, bg=CARD_BG)
@@ -276,18 +288,16 @@ class EditPasswordDialog(tk.Toplevel):
 
     def _on_save(self):
         category = self._cat_var.get().strip()
+        detail = self._detail_var.get().strip()
         account_name = self._acc_var.get().strip()
         password = self._pw_var.get().strip()
-        notes = self._notes_var.get().strip()
+        notes = self._notes_text.get("1.0", "end-1c").strip()
 
         if not account_name:
             messagebox.showerror("Lỗi", "Vui lòng nhập tên tài khoản!", parent=self)
             return
-        if not password:
-            messagebox.showerror("Lỗi", "Vui lòng nhập mật khẩu!", parent=self)
-            return
 
-        self.result = (category, account_name, password, notes)
+        self.result = (category, detail, account_name, password, notes)
         self.destroy()
 
     def _on_cancel(self):

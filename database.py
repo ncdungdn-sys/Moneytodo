@@ -239,6 +239,43 @@ def _migrate_db(conn):
         c.execute("ALTER TABLE exercise_reminders ADD COLUMN is_active INTEGER DEFAULT 1")
         conn.commit()
 
+    # Migration: add detail column and make password nullable in passwords table
+    c.execute("PRAGMA table_info(passwords)")
+    pw_col_rows = c.fetchall()
+    if pw_col_rows:
+        pw_col_names = [row[1] for row in pw_col_rows]
+        if "detail" not in pw_col_names:
+            # Recreate the passwords table with detail column and nullable password
+            c.execute("ALTER TABLE passwords RENAME TO passwords_old")
+            c.execute("""
+                CREATE TABLE passwords (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    category TEXT NOT NULL,
+                    detail TEXT,
+                    account_name TEXT NOT NULL,
+                    password TEXT,
+                    notes TEXT,
+                    created_at TEXT DEFAULT (datetime('now','localtime')),
+                    updated_at TEXT DEFAULT (datetime('now','localtime'))
+                )
+            """)
+            # Only copy columns that exist in the old table
+            old_has_timestamps = "created_at" in pw_col_names
+            if old_has_timestamps:
+                c.execute("""
+                    INSERT INTO passwords (id, category, detail, account_name, password, notes, created_at, updated_at)
+                    SELECT id, category, NULL, account_name, password, notes, created_at, updated_at
+                    FROM passwords_old
+                """)
+            else:
+                c.execute("""
+                    INSERT INTO passwords (id, category, detail, account_name, password, notes)
+                    SELECT id, category, NULL, account_name, password, notes
+                    FROM passwords_old
+                """)
+            c.execute("DROP TABLE passwords_old")
+            conn.commit()
+
 
 def _seed_default_categories(conn):
     """Insert default categories if table is empty."""
@@ -1003,8 +1040,9 @@ def _create_password_tables(conn):
         CREATE TABLE IF NOT EXISTS passwords (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             category TEXT NOT NULL,
+            detail TEXT,
             account_name TEXT NOT NULL,
-            password TEXT NOT NULL,
+            password TEXT,
             notes TEXT,
             created_at TEXT DEFAULT (datetime('now','localtime')),
             updated_at TEXT DEFAULT (datetime('now','localtime'))
@@ -1072,15 +1110,15 @@ def master_password_exists():
     return count > 0
 
 
-def add_password(category, account_name, password, notes=""):
+def add_password(category, detail, account_name, password, notes=""):
     """Add a new password entry. Returns the new row id."""
     conn = get_connection()
     try:
         _create_password_tables(conn)
         c = conn.cursor()
         c.execute(
-            "INSERT INTO passwords (category, account_name, password, notes) VALUES (?, ?, ?, ?)",
-            (category, account_name, password, notes),
+            "INSERT INTO passwords (category, detail, account_name, password, notes) VALUES (?, ?, ?, ?, ?)",
+            (category, detail or None, account_name, password or None, notes or None),
         )
         conn.commit()
         new_id = c.lastrowid
@@ -1094,16 +1132,16 @@ def add_password(category, account_name, password, notes=""):
         conn.close()
 
 
-def update_password(password_id, category, account_name, password, notes=""):
+def update_password(password_id, category, detail, account_name, password, notes=""):
     """Update an existing password entry."""
     conn = get_connection()
     c = conn.cursor()
     c.execute(
         """UPDATE passwords
-           SET category=?, account_name=?, password=?, notes=?,
+           SET category=?, detail=?, account_name=?, password=?, notes=?,
                updated_at=datetime('now','localtime')
            WHERE id=?""",
-        (category, account_name, password, notes, password_id),
+        (category, detail or None, account_name, password or None, notes or None, password_id),
     )
     conn.commit()
     conn.close()
@@ -1121,16 +1159,16 @@ def delete_password(password_id):
 def get_all_passwords():
     """Return all passwords sorted by category then account_name.
 
-    Returns a list of tuples: (id, category, account_name, password, notes).
+    Returns a list of tuples: (id, category, detail, account_name, password, notes).
     """
     conn = get_connection()
     try:
         _create_password_tables(conn)
         c = conn.cursor()
         c.execute(
-            "SELECT id, category, account_name, password, notes FROM passwords ORDER BY category, account_name"
+            "SELECT id, category, detail, account_name, password, notes FROM passwords ORDER BY category, account_name"
         )
-        rows = [(r["id"], r["category"], r["account_name"], r["password"], r["notes"]) for r in c.fetchall()]
+        rows = [(r["id"], r["category"], r["detail"], r["account_name"], r["password"], r["notes"]) for r in c.fetchall()]
         print(f"[get_all_passwords] ✅ Loaded {len(rows)} passwords")
         return rows
     except Exception as e:
@@ -1141,37 +1179,37 @@ def get_all_passwords():
 
 
 def search_passwords(keyword):
-    """Search passwords by account_name or category (case-insensitive).
+    """Search passwords by account_name, detail or category (case-insensitive).
 
-    Returns a list of tuples: (id, category, account_name, password, notes).
+    Returns a list of tuples: (id, category, detail, account_name, password, notes).
     """
     conn = get_connection()
     c = conn.cursor()
     pattern = f"%{keyword}%"
     c.execute(
-        """SELECT id, category, account_name, password, notes FROM passwords
-           WHERE account_name LIKE ? OR category LIKE ?
+        """SELECT id, category, detail, account_name, password, notes FROM passwords
+           WHERE account_name LIKE ? OR category LIKE ? OR detail LIKE ?
            ORDER BY category, account_name""",
-        (pattern, pattern),
+        (pattern, pattern, pattern),
     )
-    rows = [(r["id"], r["category"], r["account_name"], r["password"], r["notes"]) for r in c.fetchall()]
+    rows = [(r["id"], r["category"], r["detail"], r["account_name"], r["password"], r["notes"]) for r in c.fetchall()]
     conn.close()
     return rows
 
 
 def get_password_by_id(password_id):
-    """Return a single password entry as a tuple (id, category, account_name, password, notes)."""
+    """Return a single password entry as a tuple (id, category, detail, account_name, password, notes)."""
     conn = get_connection()
     c = conn.cursor()
     c.execute(
-        "SELECT id, category, account_name, password, notes FROM passwords WHERE id=?",
+        "SELECT id, category, detail, account_name, password, notes FROM passwords WHERE id=?",
         (password_id,),
     )
     row = c.fetchone()
     conn.close()
     if row is None:
         return None
-    return (row["id"], row["category"], row["account_name"], row["password"], row["notes"])
+    return (row["id"], row["category"], row["detail"], row["account_name"], row["password"], row["notes"])
 
 
 # ─── Contacts ─────────────────────────────────────────────────────────────────
