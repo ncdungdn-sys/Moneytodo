@@ -28,8 +28,9 @@ class PasswordsFrame(ttk.Frame):
 
     def __init__(self, parent):
         super().__init__(parent)
+        # True while the user has authenticated in the current tab session.
+        # Reset to False whenever the user navigates away.
         self._authenticated = False
-        self._password_session_active = False
         self._build_locked_ui()
         self._build_manager_ui()
         self._show_locked_state()
@@ -126,7 +127,7 @@ class PasswordsFrame(ttk.Frame):
     def request_access(self):
         """Show authentication dialogs and return True if access is granted."""
         # Already authenticated in this session
-        if self._authenticated and self._password_session_active:
+        if self._authenticated:
             return True
 
         # First time: set up a master password
@@ -134,7 +135,6 @@ class PasswordsFrame(ttk.Frame):
             dlg = MasterPasswordDialog(self.winfo_toplevel())
             if dlg.result:
                 self._authenticated = True
-                self._password_session_active = True
                 self._show_manager_state()
                 return True
             return False
@@ -143,7 +143,6 @@ class PasswordsFrame(ttk.Frame):
         dlg = VerifyMasterPasswordDialog(self.winfo_toplevel())
         if dlg.result:
             self._authenticated = True
-            self._password_session_active = True
             self._show_manager_state()
             return True
 
@@ -153,7 +152,6 @@ class PasswordsFrame(ttk.Frame):
     def lock_session(self):
         """Lock the session when the user navigates away from this tab."""
         self._authenticated = False
-        self._password_session_active = False
         self._show_locked_state()
 
     def load_data(self):

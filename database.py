@@ -921,6 +921,7 @@ def _create_password_tables(conn):
         CREATE TABLE IF NOT EXISTS master_password (
             id INTEGER PRIMARY KEY CHECK (id = 1),
             password_hash TEXT NOT NULL,
+            password_salt TEXT NOT NULL,
             created_at TEXT DEFAULT (datetime('now','localtime')),
             updated_at TEXT DEFAULT (datetime('now','localtime'))
         )
@@ -941,20 +942,33 @@ def _create_password_tables(conn):
     conn.commit()
 
 
-def _hash_master_password(password):
-    """Return SHA-256 hex digest of the given password string."""
-    return hashlib.sha256(password.encode("utf-8")).hexdigest()
+def _derive_master_password_hash(password, salt_hex):
+    """Derive a secure hash from the master password using PBKDF2-HMAC-SHA256.
+
+    Uses 260,000 iterations (OWASP 2023 recommendation) with a per-user salt
+    so that the hash is resistant to brute-force and rainbow-table attacks.
+    Returns the hex-encoded derived key.
+    """
+    dk = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        bytes.fromhex(salt_hex),
+        260_000,
+        dklen=32,
+    )
+    return dk.hex()
 
 
 def set_master_password(password):
     """Set the master password (first time only). Returns True on success."""
     try:
-        pw_hash = _hash_master_password(password)
+        salt = os.urandom(32).hex()
+        pw_hash = _derive_master_password_hash(password, salt)
         conn = get_connection()
         c = conn.cursor()
         c.execute(
-            "INSERT OR REPLACE INTO master_password (id, password_hash) VALUES (1, ?)",
-            (pw_hash,),
+            "INSERT OR REPLACE INTO master_password (id, password_hash, password_salt) VALUES (1, ?, ?)",
+            (pw_hash, salt),
         )
         conn.commit()
         conn.close()
@@ -965,15 +979,15 @@ def set_master_password(password):
 
 def verify_master_password(password):
     """Verify the master password against the stored hash. Returns True if correct."""
-    pw_hash = _hash_master_password(password)
     conn = get_connection()
     c = conn.cursor()
-    c.execute("SELECT password_hash FROM master_password WHERE id = 1")
+    c.execute("SELECT password_hash, password_salt FROM master_password WHERE id = 1")
     row = c.fetchone()
     conn.close()
     if row is None:
         return False
-    return row["password_hash"] == pw_hash
+    candidate = _derive_master_password_hash(password, row["password_salt"])
+    return candidate == row["password_hash"]
 
 
 def master_password_exists():
