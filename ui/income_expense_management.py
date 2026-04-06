@@ -10,6 +10,7 @@ from tkinter import ttk, messagebox
 from datetime import date, timedelta, datetime
 from collections import defaultdict
 import database as db
+from ui.expenses_tab import _PaginationBar
 
 BG = "#F0F4F8"
 CARD_BG = "#FFFFFF"
@@ -230,6 +231,9 @@ class _CategoriesSubTab(tk.Frame):
 class _PlannedSubTab(tk.Frame):
     def __init__(self, parent):
         super().__init__(parent, bg=BG)
+        self._items = []
+        self._current_page = 1
+        self._per_page = 50
         self._build_ui()
         self.load_data()
 
@@ -275,24 +279,52 @@ class _PlannedSubTab(tk.Frame):
         self.tree.bind("<Double-1>", lambda e: self.toggle_saved())
 
         btn_row = tk.Frame(self, bg=BG)
-        btn_row.pack(fill="x", padx=10, pady=(0, 8))
+        btn_row.pack(fill="x", padx=10, pady=(0, 4))
         ttk.Button(btn_row, text="✅ Đánh dấu Đã Dành", command=self.toggle_saved).pack(side="left", padx=2)
         ttk.Button(btn_row, text="✏️ Sửa", command=self.open_edit_dialog).pack(side="left", padx=2)
         ttk.Button(btn_row, text="🗑️ Xóa", command=self.delete_selected).pack(side="left", padx=2)
 
-    def load_data(self):
-        month = self.month_var.get().strip()
-        self._items = db.get_planned_expenses(month=month if month else None)
+        # -- Pagination bar ---------------------------------------------------
+        self._pagination = _PaginationBar(self, on_page_change=self._on_page_change)
+        self._pagination.pack(fill="x", padx=10, pady=(0, 8))
+
+    def _on_page_change(self, page, per_page):
+        self._current_page = page
+        self._per_page = per_page
+        self.load_data(keep_page=True)
+
+    def load_data(self, keep_page=False):
+        if not keep_page:
+            self._current_page = 1
+
+        month = self.month_var.get().strip() or None
+        result = db.get_planned_expenses_paginated(
+            page=self._current_page,
+            per_page=self._per_page,
+            month=month,
+        )
+        self._items = result["data"]
+        self._current_page = result["page"]
+
+        # Summary totals are computed across ALL matching rows (not just the page)
+        all_items = db.get_planned_expenses(month=month)
+        total = sum(i["amount"] for i in all_items)
+        saved = sum(i["amount"] for i in all_items if i["is_saved"])
+        self.lbl_summary.config(
+            text=f"Tổng dự chi: {_fmt_money(total)}   |   Đã dành: {_fmt_money(saved)}   |   Còn lại: {_fmt_money(total - saved)}"
+        )
+
         self._refresh_tree()
+        self._pagination.update(
+            page=result["page"],
+            pages=result["pages"],
+            total=result["total"],
+            per_page=result["per_page"],
+        )
 
     def _refresh_tree(self):
         for row in self.tree.get_children():
             self.tree.delete(row)
-        total = sum(i["amount"] for i in self._items)
-        saved = sum(i["amount"] for i in self._items if i["is_saved"])
-        self.lbl_summary.config(
-            text=f"Tổng dự chi: {_fmt_money(total)}   |   Đã dành: {_fmt_money(saved)}   |   Còn lại: {_fmt_money(total - saved)}"
-        )
         for item in self._items:
             status = "✅ Đã Dành" if item["is_saved"] else "⏳ Chưa Đủ"
             tag = "saved" if item["is_saved"] else "pending"
@@ -321,7 +353,7 @@ class _PlannedSubTab(tk.Frame):
         if not sel:
             return
         db.toggle_planned_saved(int(sel[0]))
-        self.load_data()
+        self.load_data(keep_page=True)
 
     def delete_selected(self):
         sel = self.tree.selection()
