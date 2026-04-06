@@ -1209,7 +1209,6 @@ def add_contact(name, age=None, phone="", email="", address="", notes=""):
         raise ValueError("Tên liên hệ không được để trống.")
     conn = get_connection()
     try:
-        _create_contact_tables(conn)
         c = conn.cursor()
         c.execute(
             """INSERT INTO contacts (name, age, phone, email, address, notes)
@@ -1235,7 +1234,6 @@ def update_contact(contact_id, name, age=None, phone="", email="", address="", n
         raise ValueError("Tên liên hệ không được để trống.")
     conn = get_connection()
     try:
-        _create_contact_tables(conn)
         c = conn.cursor()
         c.execute(
             """UPDATE contacts
@@ -1271,7 +1269,6 @@ def get_all_contacts():
     """
     conn = get_connection()
     try:
-        _create_contact_tables(conn)
         c = conn.cursor()
         c.execute(
             "SELECT id, name, age, phone, email, address, notes, created_at, updated_at FROM contacts ORDER BY name COLLATE NOCASE"
