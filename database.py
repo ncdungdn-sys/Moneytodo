@@ -123,6 +123,7 @@ def _create_exercise_tables(conn):
             interval_minutes INTEGER DEFAULT 30,
             is_enabled INTEGER DEFAULT 1,
             sort_order INTEGER DEFAULT 0,
+            is_active INTEGER DEFAULT 1,
             created_at TEXT DEFAULT (datetime('now','localtime'))
         )
     """)
@@ -228,6 +229,13 @@ def _migrate_db(conn):
     ex_cols = [row[1] for row in c.fetchall()]
     if ex_cols and "sort_order" not in ex_cols:
         c.execute("ALTER TABLE exercise_reminders ADD COLUMN sort_order INTEGER DEFAULT 0")
+        conn.commit()
+
+    # Migration: add is_active column to exercise_reminders if missing
+    c.execute("PRAGMA table_info(exercise_reminders)")
+    ex_cols = [row[1] for row in c.fetchall()]
+    if ex_cols and "is_active" not in ex_cols:
+        c.execute("ALTER TABLE exercise_reminders ADD COLUMN is_active INTEGER DEFAULT 1")
         conn.commit()
 
 
@@ -909,6 +917,50 @@ def get_exercise_stats_today(session_id):
     stats["total"] = stats["completed"] + stats["skipped"] + stats["pending"]
     conn.close()
     return stats
+
+
+def toggle_exercise_active(exercise_id):
+    """Toggle is_active status for an exercise (1→0 or 0→1). Returns new state."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT is_active FROM exercise_reminders WHERE id=?", (exercise_id,))
+    row = c.fetchone()
+    if row is None:
+        conn.close()
+        return None
+    new_state = 0 if row["is_active"] else 1
+    conn.execute("UPDATE exercise_reminders SET is_active=? WHERE id=?", (new_state, exercise_id))
+    conn.commit()
+    conn.close()
+    return new_state
+
+
+def get_active_exercises():
+    """Get only exercises where is_active = 1, sorted."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT * FROM exercise_reminders WHERE is_active=1 ORDER BY id ASC")
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+    rows.sort(key=lambda x: (_extract_leading_number(x['exercise_name']), x['exercise_name']))
+    return rows
+
+
+def get_all_exercises_with_status():
+    """Get all exercises with is_active status, sorted."""
+    return get_exercises_sorted()
+
+
+def count_active_exercises():
+    """Return (active_count, total_count) for exercise_reminders."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT COUNT(*) FROM exercise_reminders WHERE is_active=1")
+    active = c.fetchone()[0]
+    c.execute("SELECT COUNT(*) FROM exercise_reminders")
+    total = c.fetchone()[0]
+    conn.close()
+    return active, total
 
 
 # ── Password Manager ──────────────────────────────────────────────────────────
