@@ -197,8 +197,8 @@ class ContactsFrame(tk.Frame):
             try:
                 db.add_contact(name, age, phone, email, address, notes)
                 self.load_data()
-            except ValueError as e:
-                messagebox.showerror("Lỗi", str(e), parent=self)
+            except Exception as e:
+                messagebox.showerror("Lỗi", f"Lưu liên hệ thất bại: {e}", parent=self)
 
     def _show_edit_dialog(self, contact_id):
         """Show dialog to edit an existing contact."""
@@ -216,8 +216,8 @@ class ContactsFrame(tk.Frame):
             try:
                 db.update_contact(contact_id, name, age, phone, email, address, notes)
                 self.load_data()
-            except ValueError as e:
-                messagebox.showerror("Lỗi", str(e), parent=self)
+            except Exception as e:
+                messagebox.showerror("Lỗi", f"Cập nhật liên hệ thất bại: {e}", parent=self)
 
     def _delete_contact(self, contact_id):
         """Confirm and delete a contact."""
