@@ -86,11 +86,16 @@ class ContactsFrame(tk.Frame):
     def load_data(self):
         """Reload contact list (called on tab switch and after mutations)."""
         query = self._search_var.get().strip() if hasattr(self, "_search_var") else ""
-        if query:
-            contacts = db.search_contacts(query)
-        else:
-            contacts = db.get_all_contacts()
-        self._render_contacts(contacts)
+        try:
+            if query:
+                contacts = db.search_contacts(query)
+            else:
+                contacts = db.get_all_contacts()
+            print(f"[ContactsFrame] ✅ load_data: {len(contacts)} contacts loaded")
+            self._render_contacts(contacts)
+        except Exception as e:
+            print(f"[ContactsFrame] ❌ load_data failed: {e}")
+            self._render_contacts([])
 
     def _on_search_change(self, *_):
         self.load_data()
@@ -195,9 +200,11 @@ class ContactsFrame(tk.Frame):
         if dlg.result:
             name, age, phone, email, address, notes = dlg.result
             try:
-                db.add_contact(name, age, phone, email, address, notes)
+                new_id = db.add_contact(name, age, phone, email, address, notes)
+                print(f"[ContactsFrame] ✅ Contact added: id={new_id}, name={name!r}")
                 self.load_data()
             except Exception as e:
+                print(f"[ContactsFrame] ❌ add_contact failed: {e}")
                 messagebox.showerror("Lỗi", f"Lưu liên hệ thất bại: {e}", parent=self)
 
     def _show_edit_dialog(self, contact_id):
@@ -215,8 +222,10 @@ class ContactsFrame(tk.Frame):
             name, age, phone, email, address, notes = dlg.result
             try:
                 db.update_contact(contact_id, name, age, phone, email, address, notes)
+                print(f"[ContactsFrame] ✅ Contact updated: id={contact_id}, name={name!r}")
                 self.load_data()
             except Exception as e:
+                print(f"[ContactsFrame] ❌ update_contact failed: {e}")
                 messagebox.showerror("Lỗi", f"Cập nhật liên hệ thất bại: {e}", parent=self)
 
     def _delete_contact(self, contact_id):
