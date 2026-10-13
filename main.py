@@ -18,12 +18,10 @@ import database as db
 from ui.expenses_tab import ExpensesFrame
 from ui.income_expense_management import IncomeExpenseManagementFrame
 from ui.reminders_tab import RemindersFrame
-from ui.exercise_reminder_tab import ExerciseReminderFrame
 from ui.login_screen import LoginScreen
 from ui.passwords_tab import PasswordsFrame
 from ui.shopping_list_tab import ShoppingListFrame
 from ui.contacts_tab import ContactsFrame
-from utils.exercise_reminder import start_monitor
 
 # ── Colour palette ───────────────────────────────────────────────────────────
 BG = "#F0F4F8"
@@ -64,9 +62,6 @@ class MoneytodoApp(tk.Tk):
             self.destroy()
             return
 
-        # Start exercise reminder background monitor
-        start_monitor()
-
         # Build layout
         self._build_header()
         self._build_main()
@@ -93,7 +88,7 @@ class MoneytodoApp(tk.Tk):
         style.configure("TEntry", font=FONT)
         style.configure("TCombobox", font=FONT)
 
-    # ── Header ────────────────────────────────────────────────────────────────
+    # ── Header ──────────────────────────────────────────────────────────────
 
     def _build_header(self):
         header = tk.Frame(self, bg=HEADER_BG, height=62)
@@ -132,7 +127,6 @@ class MoneytodoApp(tk.Tk):
             ("thu_chi",   "📊 Thu Chi"),
             ("reminders", "🔔 Ghi Chú Việc Làm"),
             ("shopping",  "🛒 Mua Sắm"),
-            ("exercise",  "🏋️ Tập Thể Dục"),
             ("passwords", "🔒 Quản Lý Mật Khẩu"),
             ("contacts",  "📞 Danh Bạ"),
         ]
@@ -162,14 +156,13 @@ class MoneytodoApp(tk.Tk):
             "thu_chi":    IncomeExpenseManagementFrame(self._content),
             "reminders":  RemindersFrame(self._content),
             "shopping":   ShoppingListFrame(self._content),
-            "exercise":   ExerciseReminderFrame(self._content),
             "passwords":  PasswordsFrame(self._content),
             "contacts":   ContactsFrame(self._content),
         }
         for frame in self._frames.values():
             frame.place(relwidth=1, relheight=1)
 
-    # ── Tab switching ─────────────────────────────────────────────────────────
+    # ── Tab switching ────────────────────────────────────────────────────────
 
     def _show_tab(self, tab_id):
         prev_tab = getattr(self, "_active_tab", None)
